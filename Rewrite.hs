@@ -241,7 +241,7 @@ testMain' filename = do
   forM_ gs $ \ (ms, context) -> do
     putStrLn "\ngroup:\n"
     let loc = modelConstraintLocations (head ms)
-    putStrLn $ "location: " ++ showDisjointLocation loc
+    putStrLn $ "location: " ++ showDisjointLocation "unknown" loc
     forM_ ms $ \m -> do
       putStrLn . plainShow $ m
 

@@ -45,6 +45,7 @@ data Options = Options { inputFiles :: [String]
                        , maxArguments :: Int
                        , doInitialPass :: Bool
                        , doImpliesCheck :: Bool
+                       , doOutputHTML :: Bool
                        }
   deriving (Show)
 
@@ -74,6 +75,7 @@ parseOptions = Options
                  <*> parseMaxArguments
                  <*> parseDoInitialPass
                  <*> parseDoImpliesCheck
+                 <*> parseDoOutputHTML
 
 parseSelectGroup :: O.Parser (Maybe Int)
 parseSelectGroup = optional $ option auto $
@@ -185,6 +187,12 @@ parseDoImpliesCheck :: O.Parser Bool
 parseDoImpliesCheck = flag True False $
   long "no-implies-check"
   <> help "Don't run the implies check"
+  <> showDefault
+
+parseDoOutputHTML :: O.Parser Bool
+parseDoOutputHTML = flag False True $
+  long "output-html"
+  <> help "Output HTML for MiniZincIDE"
   <> showDefault
 
 
@@ -316,10 +324,33 @@ main2 opts = do
   let shadowed (n,r,c) = any (\(n2,r2,c2) -> (n,r) /= (n2,r2) && r == r2 && n2 `subgroupOf` n) nameReps
   let unshadowed = filter (not . shadowed) nameReps
   let vacuous (n,r,c) = name (fst r) == toplevelCall c
-  -- mapM_ (\ ( (n,(l,ml)), r, c) -> putStrLn ((if shadowed ((n,(l,ml)),r,c) then "*** " else "") ++ (if vacuous ((l,ml),r,c) then "### " else "") ++ showDisjointLocation l ++ " [ " ++ maybe "" (showExpLocation) ml ++ " ] " ++ prettyPrintify r)) nameReps
+  
   -- print $ numFound
   let realReplacements = filter (\x -> not (vacuous x) && not (shadowed x)) nameReps
-  mapM_ (\(((n,(l,ml))),r,c) -> putStrLn ((if shadowed ((n,(l,ml)),r,c) then "*** " else "") ++ (if vacuous ((l,ml),r,c) then "### " else "") ++ showDisjointLocation l ++ " [ " ++ maybe "" (showExpLocation) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+
+  let modelFile = head (inputFiles opts)
+
+  if (doOutputHTML opts)
+  then do
+    putStrLn("%%%mzn-html-start")
+    putStrLn("<h1>Found Globals:</h1><ul>")
+    mapM_ (\(((n,(l,ml))),r,c) -> putStrLn ((
+      if shadowed ((n,(l,ml)),r,c)
+      then "*** "
+      else "") ++ (
+        if vacuous ((l,ml),r,c)
+        then "### "
+        else "") ++ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">" ++ prettyPrintify r ++ "</a></li>")) realReplacements
+    putStrLn("</ul>")
+    putStrLn("%%%mzn-html-end")
+  else mapM_ (\(((n,(l,ml))),r,c) -> putStrLn ((
+    if shadowed ((n,(l,ml)),r,c)
+    then "*** "
+    else "") ++ (
+      if vacuous ((l,ml),r,c)
+      then "### "
+      else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+      
 
   let allStats = s <> initialPassStats
   putStrLn $ "NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)

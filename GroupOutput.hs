@@ -1721,7 +1721,7 @@ runGroupsModels env groupMap nRandomSolutions nSampleSolutions solvingTimeout co
         -- This is wrong if the groups are processed in parallel.
         -- lock $ do hPrintf stderr "%.2f\n" (100.0 * fromIntegral groupNumber / ngroups)
         --           hFlush stderr
-        SimpleLog.log logHandle LogHigh $ "PROCESSING GROUP " ++ show groupNumber ++ " (" ++ showDisjointLocation (fst (snd ranges)) ++ " [ " ++ maybe "" showExpLocation (snd (snd ranges)) ++ " ])"
+        SimpleLog.log logHandle LogHigh $ "PROCESSING GROUP " ++ show groupNumber ++ " (" ++ showDisjointLocation "unknown" (fst (snd ranges)) ++ " [ " ++ maybe "" (showExpLocation "") (snd (snd ranges)) ++ " ])"
         SimpleLog.log logHandle LogHigh $ "  this group has " ++ show (S.size files) ++ " models"
 
         SimpleLog.log logHandle LogModel $ "first model in group:"

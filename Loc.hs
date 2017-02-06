@@ -84,17 +84,17 @@ positionAfter p1 p2 =
     posName p1 == posName p2
     && (posLine p1, posColumn p1) >= (posLine p2, posColumn p2)
               
-showDisjointLocation :: DisjointLocation -> String
-showDisjointLocation (DisjointLocation locs) =
-    unwords (map f (sort locs))
+showDisjointLocation :: String -> DisjointLocation -> String
+showDisjointLocation modelFile (DisjointLocation locs) =
+    intercalate ";" (map f (sort locs))
   where
     f (Location (Position _ l1 c1) (Position _ l2 c2)) =
-        printf "%d:%d..%d:%d" l1 c1 l2 c2
+        printf "%s:%d:%d:%d:%d" modelFile l1 c1 l2 c2
 
-showExpLocation :: Expression -> String
-showExpLocation e =
+showExpLocation :: String -> Expression -> String
+showExpLocation modelFile e =
   case e ^. expLocation of
-    Just l -> showDisjointLocation (DisjointLocation [l])
-    Nothing -> showDisjointLocation (expConstraintLocations e)
+    Just l -> showDisjointLocation modelFile (DisjointLocation [l])
+    Nothing -> showDisjointLocation modelFile (expConstraintLocations e)
 
 

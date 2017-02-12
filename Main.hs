@@ -32,7 +32,8 @@ import Rewrite
 import Statistics
 import Types
 
-data Options = Options { inputFiles :: [String]
+data Options = Options {dataFiles :: [String]
+                       , inputFile :: String
                        , maxConstraints :: Int
                        , nRandomSolutions :: Int
                        , nSampleSolutions :: Int
@@ -62,7 +63,8 @@ withInfo opts desc = info (helper <*> opts) $ progDesc desc
 
 parseOptions :: O.Parser Options
 parseOptions = Options
-                 <$> parseArguments
+                 <$> parseData
+                 <*> parseModelArg
                  <*> parseMaxConstraints
                  <*> parseRandomSolutions
                  <*> parseSampleSolutions
@@ -116,10 +118,16 @@ parseSampleSolutions = option auto $
   <> value 30
   <> showDefault
 
-parseArguments :: O.Parser [String]
-parseArguments = some $ O.argument str $
-  help "Input files (.mzn and .dzn, with the .mzn first)"
-  <> metavar "<input files>"
+parseModelArg :: O.Parser String
+parseModelArg = O.argument str $
+  help "Model file (.mzn)"
+  <> metavar "<model file>"
+
+parseData :: O.Parser [String]
+parseData = some $ strOption $
+  short 'd' 
+  <> help "Data files (.dzn)"
+  <> metavar "<data files>"
 
 parseDebugging :: O.Parser [LogCategory]
 parseDebugging =
@@ -200,7 +208,7 @@ initialPass :: Options -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics
 initialPass opts logHandle = do
   let conFilter = Just "binaries_represent_int"
   (o,s) <-
-    processModelAndData (maxConstraints opts) (head (inputFiles opts)) (tail (inputFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) conFilter (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) [] [] logHandle
+    processModelAndData (maxConstraints opts) (inputFile opts) (dataFiles opts) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) conFilter (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) [] [] logHandle
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99))
                                           (Position "introduced" (-99) (-99)))
@@ -298,8 +306,9 @@ main2 opts = do
     if doInitialPass opts
     then initialPass (opts { selectGroup = Nothing }) logHandle
     else return ([], [], emptyStatistics)
+
   (o,s) <- -- flip catch (\AbortException -> print "abort abort" >> return undefined) $ do
-    processModelAndData (maxConstraints opts) (head (inputFiles opts)) (tail (inputFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) (constraintFilter opts) (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) extraItems channelMap logHandle
+    processModelAndData (maxConstraints opts) (inputFile opts) (dataFiles opts) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) (constraintFilter opts) (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) extraItems channelMap logHandle
 --  putStrLn (concatMap unlines (map buildOutput o))
   -- forM_ pairedo $ \(((loc,context),m),o1) -> do
   --   let name = showDisjointLocation loc
@@ -328,7 +337,7 @@ main2 opts = do
   -- print $ numFound
   let realReplacements = filter (\x -> not (vacuous x) && not (shadowed x)) nameReps
 
-  let modelFile = head (inputFiles opts)
+  let modelFile = (inputFile opts)
 
   if (doOutputHTML opts)
   then do

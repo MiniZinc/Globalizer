@@ -1591,8 +1591,9 @@ solve :: Bool -> Model -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO (So
 solve restart m nsols solvingTimeout logHandle = timeAction "solve" $ do
 -- liftIO $ SimpleLog.log =<< prettyPrintModel m
  statisticsFlatZincCall
- gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
- dataFilePath <- liftIO $ getDataFileName "data-files"
+ --gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
+ --dataFilePath <- liftIO $ getDataFileName "data-files"
+ dataFilePath <- liftIO $ fromMaybe "data-file" <$> lookupEnv "GLOBALIZER_DIR"
  statisticsTime "solving via minizinc" $ liftIO $ do
   withTempFile "." "temp.mzn" $ \mznpath mznhandle -> do
     timeAction "solve/plainShow" $ hPutStrLn mznhandle (plainShow m)
@@ -1604,7 +1605,7 @@ solve restart m nsols solvingTimeout logHandle = timeAction "solve" $ do
         withTempFile "." "mzn2fzn-output" $ \stderrPath stderrHandle -> do
           -- hNull <- openFile "/dev/null" WriteMode
           let args = [ "--no-optimise"
-                     , "-I", gecodePath
+                     , "-G", "gecode" --gecodePath
                      , "-I", dataFilePath
                      , "--no-output-ozn"
                      , "-o", fznpath

@@ -89,7 +89,7 @@ showDisjointLocation modelFile (DisjointLocation locs) =
     intercalate ";" (map f (sort locs))
   where
     f (Location (Position _ l1 c1) (Position _ l2 c2)) =
-        printf "%s:%d:%d:%d:%d" modelFile l1 c1 l2 c2
+        printf "%s|%d|%d|%d|%d" modelFile l1 c1 l2 c2
 
 showExpLocation :: String -> Expression -> String
 showExpLocation modelFile e =

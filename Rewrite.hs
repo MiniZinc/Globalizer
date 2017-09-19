@@ -43,6 +43,8 @@ import Paths_minizinc_globalizer
 
 import Prelude hiding (log)
 
+import System.FilePath
+
 --import Debug.Trace (trace)
 
 -- Given a model, return its submodel groups.
@@ -143,7 +145,7 @@ instantiate ((constraint, pairs):newConstraints) = do
           rest <- f pairs' cs
           return $ c : rest
 
-processModelAndData :: Int -> FilePath -> [FilePath] -> Int -> Int -> Integer -> Maybe String -> Maybe Int -> Bool -> Int -> Bool -> [Item] -> ChannelMap -> SimpleLog.Handle
+processModelAndData :: Maybe String -> Int -> FilePath -> [FilePath] -> Int -> Int -> Integer -> Maybe String -> Maybe Int -> Bool -> Int -> Bool -> [Item] -> ChannelMap -> SimpleLog.Handle
                     -> IO (
                            [
                             (( GroupName, (S.Set (Model), Maybe (Expression)) ),
@@ -151,7 +153,7 @@ processModelAndData :: Int -> FilePath -> [FilePath] -> Int -> Int -> Integer ->
                            ],
                            Statistics
                           )
-processModelAndData maxConstraints s datafiles nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck extraItems channelMap logHandle = do
+processModelAndData includeDir maxConstraints s datafiles nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck extraItems channelMap logHandle = do
   ((o,modelMap),stats) <- runStatistics $ do
     originalModel0 <- liftIO (readModel s)
     let originalModel = originalModel0 & modelItems %~ (++extraItems)
@@ -191,7 +193,10 @@ processModelAndData maxConstraints s datafiles nRandomSolutions nSampleSolutions
                [] -> [Model []]
                _ -> ds'
 
-    bothglobMznPath <- liftIO $ getDataFileName "data-files/both-glob.mzn"
+    --bothglobMznPath <- liftIO $ getDataFileName "data-files/both-glob.mzn"
+    --bothglobMznPath <- liftIO $ fromMaybe "both-glob.mzn" <$> lookupEnv "BOTHGLOB_PATH"
+    let bothglobMznPath = (fromMaybe "./" includeDir) </> "/both-glob.mzn"
+
     globalsModel <- liftIO (stripMetadataModel . (either (const (error "no both-glob.mzn?")) id) <$> parseModelFile bothglobMznPath)
     let env = topLevelBindings (stripMetadataModel globalsModel)
 
@@ -206,7 +211,9 @@ processModelAndData maxConstraints s datafiles nRandomSolutions nSampleSolutions
              $ (name, (S.fromList ms', (stripMetadataExp <$> context)))
     let modelSets' = filter (not . S.null . fst . snd) (modelSets)
     let modelMap = M.fromList modelSets'
-    o <- runGroupsModels env modelMap nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck channelMap logHandle
+
+    let dataFilePath = (fromMaybe "./" includeDir)
+    o <- runGroupsModels dataFilePath env modelMap nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck channelMap logHandle
     return (o, modelMap)
   return (zip (M.toList modelMap) o,stats)
 

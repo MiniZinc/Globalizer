@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs #-}
 
 import Control.Applicative
 import Control.Concurrent
@@ -20,6 +21,8 @@ import System.IO
 import System.Posix.Signals
 -- import Text.Parsec.Combinator
 -- import Text.Parsec.Prim hiding ((<|>))
+import Data.Semigroup ((<>))
+import qualified Data.Monoid
 
 import Options.Applicative as O
 import SimpleLog
@@ -34,6 +37,7 @@ import Types
 
 data Options = Options { inputFiles :: [String]
                        , dataFiles :: [String]
+                       , includeDir :: Maybe String
                        , maxConstraints :: Int
                        , nRandomSolutions :: Int
                        , nSampleSolutions :: Int
@@ -65,11 +69,12 @@ parseOptions :: O.Parser Options
 parseOptions = Options
                  <$> parseArguments
                  <*> parseDataFiles
+                 <*> parseConstraintFilter
                  <*> parseMaxConstraints
                  <*> parseRandomSolutions
                  <*> parseSampleSolutions
                  <*> parseDebugging
-                 <*> parseConstraintFilter
+                 <*> parseIncludeDir
                  <*> parseSolvingTimeout
                  <*> parseSelectGroup
                  <*> parseNumJobs
@@ -161,6 +166,12 @@ parseConstraintFilter = optional $ option str $
   <> metavar "<substring>"
   <> help "Consider only constraints containing this substring"
 
+parseIncludeDir :: O.Parser (Maybe String)
+parseIncludeDir = optional $ option str $
+  short 'I' <> long "search-dir"
+  <> metavar "<dir>"
+  <> help "Additionally search for included files in <dir>"
+
 parseSolvingTimeout :: O.Parser Integer
 parseSolvingTimeout = option auto $
   short 't' <> long "solvingTimeout"
@@ -204,11 +215,13 @@ parseDoOutputHTML = flag False True $
   <> showDefault
 
 
+
+
 initialPass :: Options -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics)
 initialPass opts logHandle = do
   let conFilter = Just "binaries_represent_int"
   (o,s) <-
-    processModelAndData (maxConstraints opts) (head (inputFiles opts)) ((tail (inputFiles opts)) ++ (dataFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) conFilter (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) [] [] logHandle
+    processModelAndData (includeDir opts) (maxConstraints opts) (head (inputFiles opts)) ((tail (inputFiles opts)) ++ (dataFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) conFilter (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) [] [] logHandle
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99))
                                           (Position "introduced" (-99) (-99)))
@@ -307,7 +320,7 @@ main2 opts = do
     then initialPass (opts { selectGroup = Nothing }) logHandle
     else return ([], [], emptyStatistics)
   (o,s) <- -- flip catch (\AbortException -> print "abort abort" >> return undefined) $ do
-    processModelAndData (maxConstraints opts) (head (inputFiles opts)) ((tail (inputFiles opts)) ++ (dataFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) (constraintFilter opts) (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) extraItems channelMap logHandle
+    processModelAndData (includeDir opts) (maxConstraints opts) (head (inputFiles opts)) ((tail (inputFiles opts)) ++ (dataFiles opts)) (nRandomSolutions opts) (nSampleSolutions opts) (solvingTimeout opts) (constraintFilter opts) (selectGroup opts) (filterArguments opts) (maxArguments opts) (doImpliesCheck opts) extraItems channelMap logHandle
 --  putStrLn (concatMap unlines (map buildOutput o))
   -- forM_ pairedo $ \(((loc,context),m),o1) -> do
   --   let name = showDisjointLocation loc
@@ -360,7 +373,7 @@ main2 opts = do
       else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
       
 
-  let allStats = s <> initialPassStats
+  let allStats = s Data.Monoid.<> initialPassStats
   putStrLn $ "NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
   putStrLn $ "NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
 

@@ -8,25 +8,18 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
--- {-# OPTIONS -W -Wall #-}
 
 module GroupOutput where
 
-import Control.Applicative
---import Control.Concurrent.ParallelIO
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
 import Control.Concurrent.STM hiding (check)
-import Control.DeepSeq
---import Control.DeepSeq.TH
 import Control.Monad.Catch
---import Control.Exception hiding (try,catch)
 import Control.Exception.Lifted hiding (try,catch)
 import Control.Exception.Lens
 import Control.Lens hiding (Context, universe)
 import Control.Monad.State.Strict
---import Control.Monad.CatchIO
-import Control.Monad.Writer (execWriter, tell, Writer, MonadWriter)
+import Control.Monad.Writer (execWriter, tell)
 import qualified Data.Attoparsec.ByteString as Atto
 import qualified Data.ByteString.Char8 as BSC
 import Data.Data
@@ -36,7 +29,6 @@ import Data.Generics.Uniplate.Data
 import qualified Data.IntMap as IM
 import Data.IORef
 import Data.List
-import Data.List.Split
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Monoid (mempty, Monoid, mconcat)
@@ -50,11 +42,8 @@ import Language.MiniZinc hiding (solve)
 import Language.MiniZinc.Bindings (addAssignmentsToBindings)
 import Language.MiniZinc.Resolve
 import Language.MiniZinc.SolutionParser
---import Language.MiniZinc.Convert (mznToModel, parseMZN)
---import Language.MiniZinc.LibMzn (typecheckModel)
 import Safe hiding (at)
 import System.Clock
-import System.Environment
 import System.Exit
 import System.IO
 import System.IO.Temp
@@ -62,7 +51,6 @@ import System.Process (runProcess, waitForProcess, terminateProcess, ProcessHand
 import System.Random
 import System.Timeout
 import Text.Printf
-import System.GlobalLock
 
 import System.IO.Unsafe
 
@@ -72,16 +60,10 @@ import Common
 import EvalModel
 import Loc
 import Misc
-import MiscExp
 import Statistics
 import Types
---import Log
 
 import SimpleLog
-
-import Paths_minizinc_globalizer
-
-import Debug.Trace
 
 data AbortException = AbortException
   deriving (Show, Typeable)
@@ -147,7 +129,7 @@ variables = toList . execWriter . descendBiM f
         f e | isArrayAccess e = tell (Seq.singleton e) >> return e
         f e                   = descendM f e
         isArrayAccess e' = fromMaybe False $ do
-                            ArrayAccess a i <- return $ e'
+                            ArrayAccess a _ <- return $ e'
                             Ident _ <- return $ a ^. expRawExpression
                             return True
 
@@ -301,7 +283,7 @@ timeAction label action =
       t1 <- liftIO (getTime Monotonic)
       x <- action
       t2 <- liftIO (getTime Monotonic)
-      let nano = timeSpecAsNanoSecs t2 - timeSpecAsNanoSecs t1
+      let nano = toNanoSecs t2 - toNanoSecs t1
       liftIO $ do
         h <- getTimingHandle
         hPutStrLn h $ "TIME " ++ label ++ " " ++ show nano
@@ -354,7 +336,7 @@ scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solv
   --      when (name (fst c) == "bin_packing_capa") $ SimpleLog.log $ "SOLVING FOR CONSTRAINT: " ++ prettyPrintify c
   when (True || name (fst c) == "sliding_sum") $ SimpleLog.log logHandle LogScoring $ "SOLVING FOR CONSTRAINT: " ++ prettyPrintify c
   -- when (True || name (fst c) == "sliding_sum") $ SimpleLog.log logHandle LogScoring $ (plainShow evalledNewModel)
-  (solveStatus, csols) <-
+  (_, csols) <-
     timeAction "scoreReplacement/solve" $
       solve dataFilePath True evalledNewModel nSampleSolutions solvingTimeout logHandle
   --      statisticsFlatZincCall
@@ -397,7 +379,7 @@ scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solv
                   Left (EvalNotPar _) -> False
                   Left (EvalUndefined _) -> False
                   Left (UnfixedVariable _) -> False
-                  Left (IndexOutOfRange msg) -> False
+                  Left (IndexOutOfRange _) -> False
   --                          error $ "uh oh: " ++ show (IndexOutOfRange msg)
                   Right b -> b
     return succ'
@@ -435,7 +417,7 @@ getGoodConstraints dataFilePath env maybeContext m inter nSampleSolutions solvin
           return result
         return $! scoresAndContexts -- (maximumBy compareReplacementAndContext scoresAndContexts)
 
-  let isTrue (c,args) = name c == "true"
+  let isTrue (c,_) = name c == "true"
   exitEarly <- (const False) <$>
     case find isTrue inter of
       Nothing -> return False
@@ -464,8 +446,10 @@ getGoodConstraints dataFilePath env maybeContext m inter nSampleSolutions solvin
       void $ liftIO $ evaluate (length rockSolidConstraints)
       return . Just $! rockSolidConstraints
 
+annotationItems :: Model -> [Item]
 annotationItems m = [ i | i@(AnnotationI {}) <- m ^. modelItems ]
 
+functionItems :: Model -> [Item]
 functionItems m = [ i | i@(FunctionI {}) <- m ^. modelItems ]
 
 compareReplacementAndContext :: (Replacement,Double)
@@ -514,10 +498,6 @@ tighter1 _env (c1,args1) (c2,args2) =
         f (a1:as1) (a2:as2) | a1 == a2 = f as1 as2
                             | otherwise = False
         f _ _ = error "tighter1"
-        g [] [] = True
-        g (a1:as1) (a2:as2) | a1 == a2 = g as1 as2
-                            | otherwise = False
-        g _ _ = error "tighter1"
 
 tighter2 :: Bindings -> Replacement -> Replacement -> Bool
 -- tighter2 env (Constraint {name="sliding_sum"},[OrdinaryParameter l1,OrdinaryParameter u1,OrdinaryParameter s1,x1]) (Constraint {name="sliding_sum"},[OrdinaryParameter l2,OrdinaryParameter u2,OrdinaryParameter s2,x2]) =
@@ -659,45 +639,45 @@ notSingleton :: Expression -> [Item]
 notSingleton x = [ ConstraintI (makeExp $ BinOp (makeExp $ Call "length" [x]) BinOpGr (makeExp $ IntLit 1)) ]
 
 check :: Bindings -> Int -> String -> [Argument] -> Bool
-check bs _nsols "alldifferent" [x] = isVariable x -- && is1DArray bs x
-check bs _nsols "alldifferent_except_0" [x] = isVariable x -- && is1DArray bs x
-check bs _nsols "all_equal_int" [x] = isVariable x -- && is1DArray bs x
-check bs nsols "atleast" [n,x,v] = {-# SCC "insideCheck" #-} isVariable x -- && is1DArray bs x
+check _ _nsols "alldifferent" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "alldifferent_except_0" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "all_equal_int" [x] = isVariable x -- && is1DArray bs x
+check _ _ "atleast" [_,x,_] = {-# SCC "insideCheck" #-} isVariable x -- && is1DArray bs x
 --                                                  && isInt bs n && isInt bs v
 --                                                  && appearsIn bs nsols v x
-check bs nsols "atmost" [n,x,v] = isVariable x -- && is1DArray bs x
+check bs _ "atmost" [n,x,_] = isVariable x -- && is1DArray bs x
                                                  && isInt bs n -- && isInt bs v
 --                                                 && appearsIn bs nsols v x
-check bs _nsols "bin_packing" [c,bin,w] = isNotVariable c -- && isInt bs c
+check _ _nsols "bin_packing" [c,bin,w] = isNotVariable c -- && isInt bs c
                                                   && isVariable bin -- && is1DArray bs bin
                                                   && isNotVariable w -- && is1DArray bs w
-check bs _nsols "bin_packing_capa" [c,bin,w] = isNotVariable c -- && is1DArray bs c
+check _ _nsols "bin_packing_capa" [c,bin,w] = isNotVariable c -- && is1DArray bs c
                                                        && isVariable bin -- && is1DArray bs bin
                                                        && isNotVariable w -- && is1DArray bs w
-check bs _nsols "bin_packing_load" [l,bin,w] = isVariable l -- && is1DArray bs l
+check _ _nsols "bin_packing_load" [l,bin,w] = isVariable l -- && is1DArray bs l
                                                        && isVariable bin -- && is1DArray bs bin
                                                        && isNotVariable w -- && is1DArray bs w
-check bs _nsols "bin_packing_load_ub" [l,bin,w] = isVariable l -- && is1DArray bs l
+check _ _nsols "bin_packing_load_ub" [l,bin,w] = isVariable l -- && is1DArray bs l
                                                          && isVariable bin -- && is1DArray bs bin
                                                          && isNotVariable w -- && is1DArray bs w
-check bs _nsols "binaries_represent_int" [b] = isVariable b
-check bs _nsols "binaries_represent_int_3A" [b] = isVariable b
-check bs _nsols "binaries_represent_int_3B" [b] = isVariable b
-check bs _nsols "binaries_represent_int_3C" [b] = isVariable b
-check bs _nsols "channel" [x,a] =
+check _ _nsols "binaries_represent_int" [b] = isVariable b
+check _ _nsols "binaries_represent_int_3A" [b] = isVariable b
+check _ _nsols "binaries_represent_int_3B" [b] = isVariable b
+check _ _nsols "binaries_represent_int_3C" [b] = isVariable b
+check _ _nsols "channel" [x,a] =
 --    is1DArray bs a && isInt bs x
     (isVariable a || isVariable x)
-check bs _nsols "channelACB" [x,a] =
+check _ _nsols "channelACB" [x,a] =
 --    is1DArray bs a && isInt bs x
     (isVariable a || isVariable x)
-check bs _nsols "circuit_checking" [x] = isVariable x -- && is1DArray bs x
-check bs _nsols "count" [x,y,c] = isVariable x -- && is1DArray bs x
+check _ _nsols "circuit_checking" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "count" [x,_,_] = isVariable x -- && is1DArray bs x
                                           -- && isInt bs y
                                           -- && isInt bs c
-check bs _nsols "count_geq" [x,y,c] =
+check _ _nsols "count_geq" [x,_,_] =
   -- FORBIDDEN
   False && isVariable x
-check bs _nsols "cumulative" [s,d,r,b] =
+check _ _nsols "cumulative" [s,d,r,_] =
     -- is1DArray bs s
     -- && is1DArray bs d
     -- && is1DArray bs r
@@ -705,8 +685,8 @@ check bs _nsols "cumulative" [s,d,r,b] =
     (isVariable s || isVariable d || isVariable r)
     && s /= d && d /= r && s /= r
 check bs nsols "cumulative_assert" args = check bs nsols "cumulative" args
-check bs _nsols "decreasing" [x] = isVariable x -- && is1DArray bs x
-check bs _nsols "diffn" [x,y,dx,dy] =
+check _ _nsols "decreasing" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "diffn" [x,y,dx,dy] =
     -- is1DArray bs x
     -- && is1DArray bs y
     -- && is1DArray bs dx
@@ -714,53 +694,53 @@ check bs _nsols "diffn" [x,y,dx,dy] =
       ((isVariable x && isVariable y) || (isVariable dx && isVariable dy))
     && x /= dx && x /= dy && y /= dx && y /= dy
     && x /= y
-check bs _nsols "distribute" [c,v,b] = True 
+check _ _nsols "distribute" [_,_,_] = True 
                                        -- && is1DArray bs c
                                        --         && is1DArray bs v
                                        --         && is1DArray bs b
-check bs _nsols "element" [i,a,v] =
+check _ _nsols "element" [_,_,_] =
   -- FORBIDDEN
   False && True -- && isInt bs i && isInt bs v
                                          --    && is1DArray bs a
-check bs _nsols "exactly" [n,x,v] = isNotVariable n -- && isInt bs n
+check _ _nsols "exactly" [n,x,v] = isNotVariable n -- && isInt bs n
                                             && isVariable x -- && is1DArray bs x
                                             && isNotVariable v -- && isInt bs v
-check bs _nsols "gcc" [x,cs] = is1DArray bs x -- && is1DArray bs cs
-check bs _nsols "global_cardinality" [x,cv,cs] = -- is1DArray bs x
+check bs _nsols "gcc" [x,_] = is1DArray bs x -- && is1DArray bs cs
+check _ _nsols "global_cardinality" [_,cv,_] = -- is1DArray bs x
                                                          isNotVariable cv -- && is1DArray bs cv
                                                          -- && is1DArray bs cs
-check bs _nsols "increasing" [x] = isVariable x -- && is1DArray bs x
-check bs _nsols "inverse" [x,y] = True -- && is1DArray bs x && is1DArray bs y
-check bs _nsols "lex_less_int_checking" [x,y] = True -- && is1DArray bs x && is1DArray bs y
-check bs _nsols "lex_lesseq_int_checking" [x,y] = x /= y -- && is1DArray bs x && is1DArray bs y
-check bs _nsols "lex2" [x] = isVariable x -- && is2DArray bs x
+check _ _nsols "increasing" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "inverse" [_,_] = True -- && is1DArray bs x && is1DArray bs y
+check _ _nsols "lex_less_int_checking" [_,_] = True -- && is1DArray bs x && is1DArray bs y
+check _ _nsols "lex_lesseq_int_checking" [x,y] = x /= y -- && is1DArray bs x && is1DArray bs y
+check _ _nsols "lex2" [x] = isVariable x -- && is2DArray bs x
 check bs nsols "lex2_checking" [x] = check bs nsols "lex2" [x]
-check bs _nsols "lineareq" [x,y,n] = True -- && is1DArray bs x && is1DArray bs y
+check _ _nsols "lineareq" [_,_,_] = True -- && is1DArray bs x && is1DArray bs y
                                           --    && isInt bs n
-check bs _nsols "member" [xs,x] =
+check _ _nsols "member" [_,_] =
   -- FORBIDDEN
   False && True -- && is1DArray bs xs && isInt bs x
-check bs _nsols "maximum_int_checking" [x,xs] = True -- && is1DArray bs xs && isInt bs x
-check bs _nsols "minimum_int_checking" [x,xs] = True -- && is1DArray bs xs && isInt bs x
-check bs _nsols "nvalue" [n,x] = True -- && is1DArray bs x && isInt bs n
-check bs _nsols "sliding_sum" [l,u,s,vs] = isNotVariable l -- && isInt bs l
+check _ _nsols "maximum_int_checking" [_,_] = True -- && is1DArray bs xs && isInt bs x
+check _ _nsols "minimum_int_checking" [_,_] = True -- && is1DArray bs xs && isInt bs x
+check _ _nsols "nvalue" [_,_] = True -- && is1DArray bs x && isInt bs n
+check _ _nsols "sliding_sum" [l,u,s,vs] = isNotVariable l -- && isInt bs l
                                                    && isNotVariable u -- && isInt bs u
                                                    && isNotVariable s -- && isInt bs s
                                                    && (l /= u) && (l /= s) && (u /= s)
                                                    && isVariable vs -- && is1DArray bs vs
-check bs _nsols "sort_checking" [x,y] = -- is1DArray bs x && is1DArray bs y
+check _ _nsols "sort_checking" [x,y] = -- is1DArray bs x && is1DArray bs y
                                                  (isVariable x || isVariable y)
 check bs nsols "strict_lex2" [x] = check bs nsols "lex2" [x]
 check bs nsols "strict_lex2_checking" [x] = check bs nsols "strict_lex2" [x]
-check bs _nsols "subcircuit_checking" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "subcircuit_checking" [x] = isVariable x -- && is1DArray bs x
 --check bs nsols (Constraint "sum_constraint" 2) [n,x] | trace (show (n,x)) False = undefined
-check bs _nsols "sum_constraint" [n,x] = isVariable x -- && is1DArray bs x
+check _ _nsols "sum_constraint" [_,x] = isVariable x -- && is1DArray bs x
                                       -- && isInt bs n
-check bs _nsols "unary" [s,d] =
+check _ _nsols "unary" [s,d] =
     -- is1DArray bs s
     -- && is1DArray bs d
      (isVariable s || isVariable d)
-check bs nsols "value_precede" [s,t,x] = isNotVariable s -- && isInt bs s
+check _ _ "value_precede" [s,t,x] = isNotVariable s -- && isInt bs s
                                                   && isNotVariable t -- && isInt bs t
                                                   && isVariable x -- && is1DArray bs x
 --                                                  && (appearsIn bs nsols s x && appearsIn bs nsols t  x)
@@ -770,7 +750,7 @@ check _bs _nsols _cname _args = True
 
 isVariable :: Argument -> Bool
 isVariable (ErstwhileVariable {}) = True
-isVariable (ArgumentArrayAccess a idx) = isVariable a
+isVariable (ArgumentArrayAccess a _) = isVariable a
 isVariable _ = False
 isNotVariable :: Argument -> Bool
 isNotVariable = not . isVariable
@@ -807,13 +787,13 @@ noBlanks = not . any blank
 
 -- nSampleSolutions :: Num a => a
 -- nSampleSolutions = 30
-
+evalModelIdentifiers :: Model -> Model
 evalModelIdentifiers m =
   snd $ runResolve $ do
     me <- resolveModel m
     (vdidmap, _bmap) <- get
     let f :: Expression -> Expression
-        f e@(expRaw -> Bound x (VarDeclId vdid)) =
+        f e@(expRaw -> Bound _ (VarDeclId vdid)) =
           let Just vd = IM.lookup vdid (idMap vdidmap)
           in case vd ^. varDeclExpression of
                Nothing -> e
@@ -826,7 +806,6 @@ evalModelIdentifiers m =
 getVariablesInConstraints :: Model -> [Expression']
 getVariablesInConstraints m' =
   let m = evalModelIdentifiers . evalModelArraySlices $ m'
-      es = [ e | ConstraintI e <- m ^. modelItems ]
       vars = concatMap variablesDefinedByItem (m ^. modelItems)
   in nub vars
 
@@ -842,6 +821,7 @@ variablesDefinedByItem (VarDeclI vd) = do
   --                            return $ ArrayAccess (makeExp $ Ident ident) idx
 variablesDefinedByItem _ = []
 
+chooseIndex :: TypeInst -> [Expression]
 chooseIndex ti =
   case tiDomain ti of
     Just e -> case e ^. expRawExpression of
@@ -920,7 +900,7 @@ impliesCheck2 :: String -> Bindings -> Model -> Item -> Item -> Int -> Integer -
 impliesCheck2 dataFilePath env m c1 c2 nRandomSolutions solvingTimeout logHandle = do
     -- Find some solutions to M+C1.
     SimpleLog.log logHandle LogDebug "impliesCheck2"
-    (solveStatus, sols1) <-
+    (_, sols1) <-
       timeAction "impliesCheck2/solve" $
       solve dataFilePath True (m & modelItems %~ (c1:)) nRandomSolutions solvingTimeout logHandle
     if length sols1 < nRandomSolutions
@@ -944,7 +924,7 @@ impliesCheck2 dataFilePath env m c1 c2 nRandomSolutions solvingTimeout logHandle
                                 Left (EvalNotPar _) -> False
                                 Left (EvalUndefined _) -> False
                                 Left (UnfixedVariable _) -> False
-                                Left (IndexOutOfRange msg) -> False
+                                Left (IndexOutOfRange _) -> False
 --                                    error $ "uh oh: " ++ show (IndexOutOfRange msg)
                                 Right b -> b
 
@@ -1028,7 +1008,7 @@ processModelWrapper :: String
                     -> StatisticsIO [(Replacement,Double)]
 processModelWrapper dataFilePath env maybeContext m maybeReps nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle = do
   let innerHandler action = 
-          catching failedProcessReason action $ \fpr -> do
+          catching failedProcessReason action $ \_ -> do
             -- case fpr of
             -- --   NoSolutions -> liftIO $ hPutStrLn stderr $ "(no solutions)" -- \nin this submodel:\n" ++ plainShow m
             --   ImpliesCheck -> liftIO $ hPutStrLn stderr $ "(implies check succeeded)" -- on this submodel:\n" ++ plainShow m ++ "\nwith this context: " ++ maybe "(no context)" showExp maybeContext
@@ -1037,9 +1017,9 @@ processModelWrapper dataFilePath env maybeContext m maybeReps nRandomSolutions n
             return []
       outerHandler :: StatisticsIO [(Replacement,Double)] -> StatisticsIO [(Replacement,Double)]
       outerHandler action = catch action $ \err -> do
-                              liftIO $ hPutStrLn stderr $ "processModelWrapper caught: " ++ show (err::SomeException)
+                              _ <- liftIO $ hPutStrLn stderr $ "processModelWrapper caught: " ++ show (err::SomeException)
                                              ++ "\nin this model:\n" ++ plainShow m
-                              liftIO $ exitFailure
+                              _ <- liftIO $ exitFailure
                               return []
   outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle
   -- result <- trying _ErrorCall (processModel m maybeReps)
@@ -1160,9 +1140,8 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
         constraintTemplateModel0 & modelItems <>~ filter isFunctionI (m ^. modelItems)
 
   let firstSolution = headNote "no solutions to submodel?" solutions
-      firstWord l = headNote "solution line has no head?" (words l)
   let identifiersInSolution = --map firstWord (lines (firstSolution))
-        map (\(AssignI x v) -> x) (_modelItems firstSolution)
+        map (\(AssignI x _) -> x) (_modelItems firstSolution)
             
   -- At this point, constraintTemplateModel' no longer has the
   -- original declarations for variables --- they have been replaced
@@ -1260,7 +1239,7 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
   -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1)
   -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1Filtered)
 
-  let acceptableConstraint (Constraint name args) =
+  let acceptableConstraint (Constraint name _) =
           and [ name /= "atmost"
               , name /= "atleast"
               , case constraintFilter of
@@ -1301,8 +1280,8 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
       -- SimpleLog.log logHandle LogArgs $ "filling in blanks... " ++ show rawargs'
       eitherArgs <- liftIO $ try $ return $! fillInBlanks c templateEnv solutionAssignments rawargs
       let args = case eitherArgs of
-                   Left (IndexOutOfRange msg) -> rawargs
-                   Left e -> rawargs
+                   Left (IndexOutOfRange _) -> rawargs
+                   Left _ -> rawargs
                    Right r -> r
       -- SimpleLog.log logHandle LogArgs $ "blanks filled: " ++ show rawargs'
           --args = rawargs
@@ -1339,7 +1318,6 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
                                  | -- i <- [1..length solutions],
                                    let args' = map argumentToExpression args ]
           let items = extraCon ++ coreCon
-              repItem = headNote "core items list empty?" coreCon
           let modelToCheck = constraintTemplateModel'' & modelItems <>~ items
           recordLogKey "model to check" (plainShow modelToCheck)
           when (True || name c == "bin_packing_capa") $ SimpleLog.log logHandle LogChecking $ "CHECKING FOR: " ++ prettyPrintify (c,args) ++ " (there are " ++ show (length solutionAssignments) ++ " to check)"
@@ -1369,7 +1347,7 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
                            Left (EvalNotPar _) -> False
                            Left (EvalUndefined _) -> False
                            Left (UnfixedVariable _) -> False
-                           Left (IndexOutOfRange msg) ->
+                           Left (IndexOutOfRange _) ->
                                if null [ () | OrdinaryParameter (ArrayAccess _ _) <- args ]
                                   && null [ () | ArgumentArrayAccess {} <- args ]
                                then False -- error $ "uh oh: " ++ show (IndexOutOfRange msg)
@@ -1719,7 +1697,6 @@ type GroupName = (Integer, (DisjointLocation, Maybe (Expression)))
 
 runGroupsModels :: String -> Bindings -> M.Map GroupName (S.Set (Model), Maybe (Expression)) -> Int -> Int -> Integer -> Maybe String -> Maybe Int -> Bool -> Int -> Bool -> ChannelMap -> SimpleLog.Handle -> StatisticsIO [[(Replacement, Double)]]
 runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck channelMap logHandle = do
-  let ngroups = (fromIntegral $ M.size groupMap) :: Double
   let runGroup :: Integer -> (GroupName, (S.Set (Model), Maybe (Expression)))
                -> IO ([(Replacement, Double)], Statistics)
       runGroup groupNumber (ranges,(files, context)) = do
@@ -1758,19 +1735,19 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
         --                                                         $ (+1) <$> elemIndex (Ident "_") args
         --     printf "CHANNEL: %s %s %d\n" iname bsname underscoreArg
 
-        let isTrue ((c,args),_) = name c == "true"
+        let isTrue ((c,_),_) = name c == "true"
         let out2 = case find isTrue out of
                      Nothing -> out
                      Just x -> [x]
 
         -- Make sure we force the output.
-        evaluate (length (show (out2, st)))
+        _ <- evaluate (length (show (out2, st)))
 
         SimpleLog.log logHandle LogHigh $ "Group output: " ++ show out2
 
         return (out2, st)
 
-  forM_ (M.toList groupMap) $ \(name, pair) -> do
+  forM_ (M.toList groupMap) $ \(_, pair) -> do
     SimpleLog.log logHandle LogDebug $ "new group"
     forM_ (S.toList (fst pair)) $ \m -> do
       SimpleLog.log logHandle LogDebug $ plainShow m
@@ -1811,18 +1788,21 @@ concurrentlyLimited' _ [] [] results = return . map snd $ sortBy (comparing fst)
 concurrentlyLimited' 0 todo ongoing results = do
     (task, newResult) <- waitAny ongoing
     concurrentlyLimited' 1 todo (delete task ongoing) (newResult:results)
-concurrentlyLimited' n [] ongoing results = concurrentlyLimited' 0 [] ongoing results
+concurrentlyLimited' _ [] ongoing results = concurrentlyLimited' 0 [] ongoing results
 concurrentlyLimited' n ((i, task):otherTasks) ongoing results = do
     t <- async $ (i,) <$> task
     concurrentlyLimited' (n-1) otherTasks (t:ongoing) results
 
-
-
+argInt0 :: ArgType
 argInt0 = ArgType ArgInt 0
+argInt1 :: ArgType
 argInt1 = ArgType ArgInt 1
+argInt2 :: ArgType
 argInt2 = ArgType ArgInt 2
+argInt3 :: ArgType
 argInt3 = ArgType ArgInt 3
 
+potentialConstraints :: [Constraint]
 potentialConstraints = map (uncurry Constraint)
                        [ ("alldifferent",[argInt1])
                        , ("alldifferent_except_0",[argInt1])
@@ -1886,7 +1866,7 @@ potentialConstraints = map (uncurry Constraint)
 
 
 findM :: Monad m => (a -> m Bool) -> [a] -> m (Maybe a)
-findM f [] = return Nothing
+findM _ [] = return Nothing
 findM f (x:xs) = do
   b <- f x
   if b then return (Just x)

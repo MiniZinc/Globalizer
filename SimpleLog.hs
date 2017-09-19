@@ -25,9 +25,9 @@ data Handle = Handle {
 
 newHandle :: [LogCategory] -> IO.Handle -> IO SimpleLog.Handle
 newHandle [] _ = return $ SimpleLog.Handle {
-  SimpleLog.log = \cat msg -> return ()
-, SimpleLog.logN = \cat msg -> return ()
-, SimpleLog.logPrint = \cat msg -> return ()
+  SimpleLog.log = \_ _ -> return ()
+, SimpleLog.logN = \_ _ -> return ()
+, SimpleLog.logPrint = \_ _ -> return ()
 }
 newHandle categories h = do
   return $ SimpleLog.Handle {

@@ -6,40 +6,31 @@
 
 module Rewrite where
 
+import Debug.Trace
 import Language.MiniZinc
 import Data.Maybe
-import Data.Monoid
 import Data.Ord
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import Control.Applicative
 import Control.Lens hiding (contexts, Context)
 import Control.Monad.State
-import System.Environment
 import Data.Either
-import Data.Data
-import Data.Data.Lens
 import Data.List
 import qualified Data.Graph.Inductive as Gr
-import Language.MiniZinc.Bindings
 import Language.MiniZinc.Resolve
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Text.Printf
 import System.IO
 
-import GroupOutput (runGroupsModels, buildOutput, GroupName)
+import GroupOutput (runGroupsModels, GroupName)
 import Loc
 import Misc
 import Normalisation
 import Statistics
 import Submodel
 import Types
-import Transform
 
 import SimpleLog
-
-import Paths_minizinc_globalizer
 
 import Prelude hiding (log)
 
@@ -193,9 +184,7 @@ processModelAndData includeDir maxConstraints s datafiles nRandomSolutions nSamp
                [] -> [Model []]
                _ -> ds'
 
-    --bothglobMznPath <- liftIO $ getDataFileName "data-files/both-glob.mzn"
-    --bothglobMznPath <- liftIO $ fromMaybe "both-glob.mzn" <$> lookupEnv "BOTHGLOB_PATH"
-    let bothglobMznPath = (fromMaybe "./" includeDir) </> "/both-glob.mzn"
+    let bothglobMznPath = (fromMaybe "./" includeDir) ++ "/both-glob.mzn"
 
     globalsModel <- liftIO (stripMetadataModel . (either (const (error "no both-glob.mzn?")) id) <$> parseModelFile bothglobMznPath)
     let env = topLevelBindings (stripMetadataModel globalsModel)
@@ -234,6 +223,7 @@ connected m =
         result = Gr.isConnected connectionGraph
     in result
 
+testGroups :: MonadIO m => FilePath -> m [([Model], Maybe Expression)]
 testGroups filename = do
   originalModel <- liftIO (readModel filename)
   let maxConstraints = 1
@@ -242,10 +232,12 @@ testGroups filename = do
   -- log logHandle LogDebug (plainShow normalisedModel)
   return $ getGroups maxConstraints normalisedModel
 
+testMain :: IO ()
 testMain = testMain' "tests/test-unroll.mzn"
+testMain' :: FilePath -> IO ()
 testMain' filename = do
   gs <- testGroups filename
-  forM_ gs $ \ (ms, context) -> do
+  forM_ gs $ \ (ms, _) -> do
     putStrLn "\ngroup:\n"
     let loc = modelConstraintLocations (head ms)
     putStrLn $ "location: " ++ showDisjointLocation "unknown" loc

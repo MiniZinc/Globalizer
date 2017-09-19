@@ -15,7 +15,7 @@ import Data.List (partition)
 -- [(1.2,2),(2.3,1),(2.7,3),(3.2,4)]
 -- [(1.2,2),(2.3,1),(2.7,4),(3.2,3)]
 pairUp :: (a -> b -> Bool) -> [a] -> [b] -> [[(a,b)]]
-pairUp compatible [] [] = return []
+pairUp _ [] [] = return []
 pairUp compatible (a:as) bs = do
   -- Pick a "b" to be the partner of "a".
   (b,restb) <- select bs

@@ -4,14 +4,6 @@
 
 module Statistics where
 
-import System.IO.Unsafe
-
-import Debug.Trace
-
-import Control.Applicative
-import Control.DeepSeq
--- <<<<<<< HEAD
---import Control.DeepSeq.TH
 import Control.Lens
 import Control.Monad.State.Strict
 import Data.Aeson as A
@@ -22,24 +14,9 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Text as T
 import qualified Data.Vector as V
---import GHC.AssertNF
-import System.Clock
--- =======
---import Control.DeepSeq.TH
-import Control.Lens
-import Control.Monad.State.Strict
-import qualified Data.Map.Strict as M
 import Data.Monoid
 import Data.Time
---import System.Clock
-import qualified Data.Text as T
---import GHC.AssertNF
---import System.Clock
--- >>>>>>> master
-import System.IO
 import Text.Printf
-
---import Log
 
 type Key = [T.Text]
 
@@ -62,13 +39,8 @@ type NestedLog = M.Map T.Text LogEntry
 
 instance ToJSON LogEntry where
   toJSON = logEntryToJSON ""
-  -- toJSON (Subtree m) = object [ "children" A..= Array 
-  --                         k A..= v | (k,v) <- M.toList m ]
---  toJSON (Leaf t) = object [ "text" A..= String t ]
 
-  -- toJSON (Subtree m) = object [ k A..= v | (k,v) <- M.toList m ]
-  -- toJSON (Leaf t) = String t
-
+logEntryToJSON :: T.Text -> LogEntry -> Value
 logEntryToJSON key (Leaf t) = object [ "text" A..= String key
                                      , "extra" A..= String t ]
 logEntryToJSON key (Subtree m) =
@@ -76,16 +48,18 @@ logEntryToJSON key (Subtree m) =
            , "children" A..= Array (V.fromList [ logEntryToJSON k v | (k,v) <- M.toList m ])
            ]
 
+nestedLogToJSON :: NestedLog -> Value
 nestedLogToJSON = logEntryToJSON "" . Subtree
-                                                     
+
 
 logTreeToNestedLog :: M.Map Key T.Text -> NestedLog
 logTreeToNestedLog t = foldl' ins M.empty (map (_1 %~ reverse) (M.toList t))
 
+ins :: NestedLog -> ([T.Text], T.Text) -> NestedLog
 ins m ([],v) = M.insertWith (\(Leaf new) (Leaf old) -> Leaf (T.concat [old, T.pack "\n", new])) (T.pack "val") (Leaf v) m
 ins m ([k],v) = M.insertWith merge k (Leaf v) m
   where merge (Leaf new) (Leaf old) = Leaf (T.concat [old, T.pack "\n", new])
-        merge (Subtree new) (Subtree old) = error $ show k
+        merge (Subtree _) (Subtree _) = error $ show k
         merge _ _ = error $ show k
 ins m ((k:ks),v) = let Subtree subm = M.findWithDefault (Subtree M.empty) k m
                        subm' = ins subm (ks,v)
@@ -108,7 +82,7 @@ instance Monoid Statistics where
 
 -- deriveNFData ''Statistics
 -- >>>>>>> master
-
+emptyStatistics :: Statistics
 emptyStatistics = Statistics { _numberModelEvaluations = 0
                              , _numberFlatZincCalls = 0
                              , _numberSuccessfulImpliesChecks = 0

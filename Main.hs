@@ -4,23 +4,12 @@
 
 import Control.Applicative
 import Control.Concurrent
-import Control.Exception
 import Control.Lens
 import Control.Monad
-import Control.Monad.Identity
-import Data.Aeson
-import Data.Aeson.Encode.Pretty
-import qualified Data.ByteString.Lazy as B
-import Data.Data
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
-import Data.Traversable
-import System.Environment
 import System.IO
-import System.Posix.Signals
--- import Text.Parsec.Combinator
--- import Text.Parsec.Prim hiding ((<|>))
 import Data.Semigroup ((<>))
 import qualified Data.Monoid
 
@@ -37,11 +26,11 @@ import Types
 
 data Options = Options { inputFiles :: [String]
                        , dataFiles :: [String]
-                       , includeDir :: Maybe String
                        , maxConstraints :: Int
                        , nRandomSolutions :: Int
                        , nSampleSolutions :: Int
                        , debugging :: [LogCategory]
+                       , includeDir :: Maybe String
                        , constraintFilter :: Maybe String
                        , solvingTimeout :: Integer
                        , selectGroup :: Maybe Int
@@ -56,25 +45,21 @@ data Options = Options { inputFiles :: [String]
 
 main :: IO ()
 main = do
---  setNumCapabilities 3
-
-  mainThread <- myThreadId
-  oldSigINTHandler <- installHandler sigINT (Catch (throwTo mainThread AbortException)) Nothing
-
   main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer")
 
+withInfo :: O.Parser a -> String -> ParserInfo a
 withInfo opts desc = info (helper <*> opts) $ progDesc desc
 
 parseOptions :: O.Parser Options
 parseOptions = Options
                  <$> parseArguments
                  <*> parseDataFiles
-                 <*> parseConstraintFilter
                  <*> parseMaxConstraints
                  <*> parseRandomSolutions
                  <*> parseSampleSolutions
                  <*> parseDebugging
                  <*> parseIncludeDir
+                 <*> parseConstraintFilter
                  <*> parseSolvingTimeout
                  <*> parseSelectGroup
                  <*> parseNumJobs
@@ -230,7 +215,7 @@ initialPass opts logHandle = do
   -- print "initial pass done"
 
   -- Is there a binaries_represent_int_3C ?
-  let bri3cs = nub [ x | (g,rs) <- o, ((c,args),s) <- rs, name c == "binaries_represent_int_3C",
+  let bri3cs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs, name c == "binaries_represent_int_3C",
                          let ErstwhileVariable x = head args ]
   extraItems3c <- Control.Monad.forM bri3cs $ \x -> do
     let ti = TypeInst { tiInst = Var
@@ -255,7 +240,7 @@ initialPass opts logHandle = do
     return (extraItems, (x, x ++ "_3c", [1,2]))
 
   -- Is there a binaries_represent_int_3B ?
-  let bri3bs = nub [ x | (g,rs) <- o, ((c,args),s) <- rs, name c == "binaries_represent_int_3B",
+  let bri3bs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs, name c == "binaries_represent_int_3B",
                          let ErstwhileVariable x = head args ]
   extraItems3b <- Control.Monad.forM bri3bs $ \x -> do
     let ti = TypeInst { tiInst = Var
@@ -280,7 +265,7 @@ initialPass opts logHandle = do
     return (extraItems, (x, x ++ "_3b", [1,3]))
 
   -- Is there a binaries_represent_int_3A ?
-  let bri3as = nub [ x | (g,rs) <- o, ((c,args),s) <- rs, name c == "binaries_represent_int_3A",
+  let bri3as = nub [ x | (_,rs) <- o, ((c,args),_) <- rs, name c == "binaries_represent_int_3A",
                          let ErstwhileVariable x = head args ]
   extraItems3a <- Control.Monad.forM bri3as $ \x -> do
     let ti = TypeInst { tiInst = Var
@@ -334,7 +319,6 @@ main2 opts = do
   -- hPutStrLn stderr (showStatistics stats)
 
 
-  let numFound = sum (map (length . view _2) o)
   let nameReps :: [ (GroupName, Replacement, Expression) ]
       nameReps = [ (name, replacement, constraint)
                        | x <- o,
@@ -342,9 +326,8 @@ main2 opts = do
                          (replacement,_s) <- x ^. _2,
                          let constraints = [ c | ConstraintI c <- (S.findMin (x ^. _1 ^. _2 ^. _1)) ^. modelItems ],
                          let constraint = head constraints ]
-  let shadowed (n,r,c) = any (\(n2,r2,c2) -> (n,r) /= (n2,r2) && r == r2 && n2 `subgroupOf` n) nameReps
-  let unshadowed = filter (not . shadowed) nameReps
-  let vacuous (n,r,c) = name (fst r) == toplevelCall c
+  let shadowed (n,r,_) = any (\(n2,r2,_) -> (n,r) /= (n2,r2) && r == r2 && n2 `subgroupOf` n) nameReps
+  let vacuous (_,r,c) = name (fst r) == toplevelCall c
   
   -- print $ numFound
   let realReplacements = filter (\x -> not (vacuous x) && not (shadowed x)) nameReps
@@ -433,4 +416,4 @@ toplevelCall e =
     case e ^. expRawExpression of
       Call f _ -> f
       Let _ e2 -> toplevelCall e2
-      e' -> showExp2 e
+      _ -> showExp2 e

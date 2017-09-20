@@ -71,7 +71,7 @@ executable minizinc-globalizer
                      , time         >=1.4
                      , transformers
                      , uniplate     >=1.6 && <1.7
-                     , unix         >=2.7 && <2.8
+                     --, unix         >=2.7
                      , vector >= 0.10.12.2
   -- hs-source-dirs:      
   default-language:    Haskell2010

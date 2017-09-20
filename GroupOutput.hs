@@ -47,7 +47,7 @@ import System.Clock
 import System.Exit
 import System.IO
 import System.IO.Temp
-import System.Process (runProcess, waitForProcess, terminateProcess, ProcessHandle)
+import System.Process
 import System.Random
 import System.Timeout
 import Text.Printf
@@ -1515,64 +1515,8 @@ replaceIdent before after x = rewriteBi f x
 makePar :: VarDecl -> VarDecl
 makePar vd = vd { _varDeclTypeInst = (_varDeclTypeInst vd) { tiInst = Par } }
 
--- solve :: (Monoid a) => Bool -> Model a -> Int -> Integer -> StatisticsIO (SolveResult, [String])
--- solve restart m nsols solvingTimeout = do
--- -- liftIO $ SimpleLog.log =<< prettyPrintModel m
---  gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
---  statisticsTime "solving via minizinc" $ liftIO $ do
---   withTempFile "." "temp.mzn" $ \mznpath mznhandle -> do
---     hPutStrLn mznhandle (plainShow m)
---     hClose mznhandle
---     -- SimpleLog.log $ plainShow m
---     withTempFile "." "temp.fzn" $ \fznpath fznhandle -> do
---       hClose fznhandle
---       withTempFile "." "output" $ \outpath outhandle -> do
---         withTempFile "." "mzn2fzn-output" $ \stderrPath stderrHandle -> do
---           -- hNull <- openFile "/dev/null" WriteMode
---           let args = ["--no-optimise", "-I", gecodePath, "--no-output-ozn", "-o", fznpath, mznpath]
--- --          let args = ["--no-optimise", "-I", "gecode/mznlib", "--no-output-ozn", "-o", fznpath, mznpath]
---           exitCode1 <- runProcess "mzn2fzn" args Nothing Nothing Nothing Nothing (Just stderrHandle) >>= waitForProcess
---           hClose stderrHandle
---           case exitCode1 of
---             ExitFailure code -> do
---                 hPutStrLn stderr ("warning: mzn2fzn failed (exit code " ++ show code ++ ")")
---                 hPutStrLn stderr ("on this model:")
---                 hPutStrLn stderr $ plainShow m
---                 hPutStrLn stderr ("and produced this output:")
---                 hPutStrLn stderr =<< readFile stderrPath
---             ExitSuccess -> return ()
---           -- SimpleLog.log $ "mzn2fzn exit code: " ++ show exitCode1
---           randomSeed <- (randomIO :: IO Word32)
---           let args2 = [ "-n", (show nsols) ]
---                       ++ (if restart && nsols > 0 then ["-restart", "luby"] else [])
---                       ++ ["-r", show randomSeed, fznpath ]
---           hNull2 <- id $ openFile "/dev/null" WriteMode
---           let rp = runProcess "fzn-gecode" args2 Nothing Nothing Nothing (Just outhandle) (Just hNull2)
---           (ph2,exitCode2) <- flip const ("gecode" :: String) $ do
--- --            let solvingTimeout = 1
---             p <- liftIO $ rp
---             e <- liftIO $ timeout (fromIntegral (solvingTimeout*1000)) (waitForProcess p)
---             return (p, e)
---           case exitCode2 of
---             Just _ -> return ()
---             Nothing -> liftIO $ do hPutStrLn stderr "timed out"
---                                    terminateProcess ph2
---                                    hPutStrLn stderr "waiting for solver process to terminate"
---                                    void $ waitForProcess ph2
---                                    hPutStrLn stderr "terminated"
---           output <- do let attemptToRead = do
---                              r <- try (readFile outpath)
---                              case r of
---                                Right x -> return x
---                                Left exc -> do hPutStrLn stderr $ "readFile " ++ outpath ++ " raised: " ++ show (exc :: IOException)
---                                               attemptToRead
---                        attemptToRead
---           void $ evaluate $ length output
---           return $ splitSolutions output
-
 solve :: String -> Bool -> Model -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO (SolveResult, [Model])
 solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve" $ do
--- liftIO $ SimpleLog.log =<< prettyPrintModel m
  statisticsFlatZincCall
  --gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
  --dataFilePath <- liftIO $ getDataFileName "data-files"
@@ -1586,14 +1530,12 @@ solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve"
       hClose fznhandle
       withTempFile "." "output" $ \outpath outhandle -> do
         withTempFile "." "mzn2fzn-output" $ \stderrPath stderrHandle -> do
-          -- hNull <- openFile "/dev/null" WriteMode
           let args = [ "--no-optimise"
                      , "-G", "gecode"--gecodePath
                      , "-I", dataFilePath
                      , "--no-output-ozn"
                      , "-o", fznpath
                      , mznpath]
---          let args = ["--no-optimise", "-I", "gecode/mznlib", "--no-output-ozn", "-o", fznpath, mznpath]
           SimpleLog.logN logHandle LogHigh $ "C"
           exitCode1 <-
             timeAction "solve/mzn2fzn" $
@@ -1614,12 +1556,12 @@ solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve"
                   [ "-n", (show nsols) ]
                   ++ (if restart && nsols > 0 then ["-restart", "luby"] else [])
                   ++ ["-r", show randomSeed, fznpath ]
-          hNull2 <- id $ openFile "/dev/null" WriteMode
-          let rp = runProcess "fzn-gecode" args2 Nothing Nothing Nothing (Just outhandle) (Just hNull2)
+          (_,_,_,rp) <- createProcess (proc "fzn-gecode" args2) {std_out = UseHandle outhandle,
+                                                                 std_err = NoStream}
           (ph2,exitCode2) <- timeAction "solve/fzn-gecode" $ flip const ("gecode" :: String) $ do
             SimpleLog.log logHandle LogDebug "starting fzn-gecode"
             SimpleLog.logN logHandle LogHigh $ "G"
-            p <- liftIO $ rp
+            let p = rp
             e <- liftIO $ timeout (fromIntegral (solvingTimeout*1000)) (waitForProcessMsg "waiting for fzn-gecode" p)
             SimpleLog.logN logHandle LogHigh $ "\b"
             SimpleLog.log logHandle LogDebug "fzn-gecode done/killed"

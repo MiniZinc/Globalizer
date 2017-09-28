@@ -1053,6 +1053,11 @@ prepareModel dataFilePath env m nRandomSolutions solvingTimeout doImpliesCheck l
       throwingM failedProcessReason ImpliesCheck
   return modelToSolve
 
+splitFilter :: String -> [String]
+splitFilter constraintFilter = map (\t -> T.unpack t) (T.splitOn (T.pack ",") (T.pack constraintFilter))
+
+anyInfix :: String -> String -> Bool
+anyInfix constraintFilter name = any (\s -> (s `isInfixOf` name)) (splitFilter constraintFilter)
 
 processModel :: String
              -> Bindings
@@ -1244,8 +1249,7 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
               , name /= "atleast"
               , case constraintFilter of
                   Nothing -> True
-                  Just s -> s `isInfixOf` name
-              ]
+                  Just s -> anyInfix s name ]
   -- name == "bin_packing_capa"
 
   let constraintsToConsider = filter acceptableConstraint potentialConstraints

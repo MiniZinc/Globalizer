@@ -149,7 +149,7 @@ parseConstraintFilter :: O.Parser (Maybe String)
 parseConstraintFilter = optional $ option str $
   short 'f' <> long "constraintFilter"
   <> metavar "<substring>"
-  <> help "Consider only constraints containing this substring"
+  <> help "Consider only constraints containing these comma seprated substrings"
 
 parseIncludeDir :: O.Parser (Maybe String)
 parseIncludeDir = optional $ option str $

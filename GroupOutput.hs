@@ -394,10 +394,6 @@ scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solv
   SimpleLog.log logHandle LogScoring $ "goods: " ++ prettyPrintify c ++ ": " ++ show goods
   return $! (c, fromIntegral goods / fromIntegral nSampleSolutions :: Double)
 
-
-
-
-
 getGoodConstraints :: String -> Bindings -> Maybe (Expression) -> Model -> [Replacement] -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO (Maybe [(Replacement,Double)])
 getGoodConstraints dataFilePath env maybeContext m inter nSampleSolutions solvingTimeout logHandle = do
   SimpleLog.log logHandle LogDebug "get good constraints"
@@ -1529,6 +1525,7 @@ solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve"
   withTempFile "." "temp.mzn" $ \mznpath mznhandle -> do
     timeAction "solve/plainShow" $ hPutStrLn mznhandle (plainShow m)
     hClose mznhandle
+
     -- SimpleLog.log $ plainShow m
     withTempFile "." "temp.fzn" $ \fznpath fznhandle -> do
       hClose fznhandle
@@ -1648,8 +1645,11 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
       runGroup groupNumber (ranges,(files, context)) = do
         -- For progress reporting, print the percentage done so far.
         -- This is wrong if the groups are processed in parallel.
-        -- lock $ do hPrintf stderr "%.2f\n" (100.0 * fromIntegral groupNumber / ngroups)
-        --           hFlush stderr
+        --let fgroupidx :: Double = fromIntegral groupNumber
+        --let ngroups :: Double = fromIntegral $ length groupMap
+        --do hPrintf stderr "%.2f\n" (100.0 * fgroupidx / ngroups)
+        --   hFlush stderr
+
         SimpleLog.log logHandle LogHigh $ "PROCESSING GROUP " ++ show groupNumber ++ " (" ++ showDisjointLocation "" (fst (snd ranges)) ++ " [ " ++ maybe "" (showExpLocation "") (snd (snd ranges)) ++ " ])"
         SimpleLog.log logHandle LogHigh $ "  this group has " ++ show (S.size files) ++ " models"
 
@@ -1705,9 +1705,14 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
   let actions = case selectGroup of
                   Nothing -> actions0
                   Just idx -> [ actions0 !! idx ]
+
   -- Run all the actions in parallel, gathering the outputs and
   -- statistics.
   (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited numCapabilities actions)
+
+  -- Report that execution is finished
+  -- hPrintf stderr "%%%%%%mzn-progress 100.00\n"
+  -- hFlush stderr
   -- Glue the statistics from all the runs together.
   let combinedStats = mconcat stats
   void $ evaluate $ length guidoParts
@@ -1728,16 +1733,21 @@ stripped = fst . span (/='/') . tail . snd . break (=='/')
 
 {- From: http://stackoverflow.com/a/22674732 -}
 concurrentlyLimited :: Int -> [IO a] -> IO [a]
-concurrentlyLimited n tasks = concurrentlyLimited' n (zip [0..] tasks) [] []
+concurrentlyLimited n tasks = concurrentlyLimited' n (zip [0..] tasks) [] [] (length tasks)
 
-concurrentlyLimited' _ [] [] results = return . map snd $ sortBy (comparing fst) results
-concurrentlyLimited' 0 todo ongoing results = do
+concurrentlyLimited' _ [] [] results ntasks = return . map snd $ sortBy (comparing fst) results
+concurrentlyLimited' 0 todo ongoing results ntasks = do
     (task, newResult) <- waitAny ongoing
-    concurrentlyLimited' 1 todo (delete task ongoing) (newResult:results)
-concurrentlyLimited' _ [] ongoing results = concurrentlyLimited' 0 [] ongoing results
-concurrentlyLimited' n ((i, task):otherTasks) ongoing results = do
+    concurrentlyLimited' 1 todo (delete task ongoing) (newResult:results) ntasks
+concurrentlyLimited' _ [] ongoing results ntasks = concurrentlyLimited' 0 [] ongoing results ntasks
+concurrentlyLimited' n ((i::Int, task):otherTasks) ongoing results ntasks = do
+    let ntasks' :: Double = fromIntegral ntasks
+    let i' :: Double = fromIntegral i
+    hPrintf stderr "%%%%%%mzn-progress %.2f\n" (100.0 * i' / ntasks')
+    hFlush stderr
     t <- async $ (i,) <$> task
-    concurrentlyLimited' (n-1) otherTasks (t:ongoing) results
+    concurrentlyLimited' (n-1) otherTasks (t:ongoing) results ntasks
+
 
 argInt0 :: ArgType
 argInt0 = ArgType ArgInt 0

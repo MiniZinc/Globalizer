@@ -16,6 +16,8 @@ TestParseAssignI
 *.ghcio
 *.ghcihi
 temp*.mzn
+mzn2fzn-output*
+output*
 output
 .stack-work
 bundles/

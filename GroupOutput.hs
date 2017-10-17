@@ -1645,10 +1645,10 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
       runGroup groupNumber (ranges,(files, context)) = do
         -- For progress reporting, print the percentage done so far.
         -- This is wrong if the groups are processed in parallel.
-        --let fgroupidx :: Double = fromIntegral groupNumber
-        --let ngroups :: Double = fromIntegral $ length groupMap
-        --do hPrintf stderr "%.2f\n" (100.0 * fgroupidx / ngroups)
-        --   hFlush stderr
+        -- let fgroupidx :: Double = fromIntegral groupNumber
+        -- let ngroups :: Double = fromIntegral $ length groupMap
+        -- do hPrintf stderr "%.2f\n" (100.0 * fgroupidx / ngroups)
+        --    hFlush stderr
 
         SimpleLog.log logHandle LogHigh $ "PROCESSING GROUP " ++ show groupNumber ++ " (" ++ showDisjointLocation "" (fst (snd ranges)) ++ " [ " ++ maybe "" (showExpLocation "") (snd (snd ranges)) ++ " ])"
         SimpleLog.log logHandle LogHigh $ "  this group has " ++ show (S.size files) ++ " models"
@@ -1711,8 +1711,9 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
   (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited numCapabilities actions)
 
   -- Report that execution is finished
-  -- hPrintf stderr "%%%%%%mzn-progress 100.00\n"
-  -- hFlush stderr
+  let _ = do hPrintf stderr "%%%%%%mzn-progress 100.00\n"
+             hFlush stderr
+
   -- Glue the statistics from all the runs together.
   let combinedStats = mconcat stats
   void $ evaluate $ length guidoParts

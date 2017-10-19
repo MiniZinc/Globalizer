@@ -1556,6 +1556,7 @@ solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve"
           let args2 =
                   [ "-n", (show nsols) ]
                   ++ (if restart && nsols > 0 then ["-restart", "luby"] else [])
+                  ++ ["-time", show $ fromIntegral (solvingTimeout*1000)]
                   ++ ["-r", show randomSeed, fznpath ]
           (_,_,_,rp) <- createProcess (proc "fzn-gecode" args2) {std_out = UseHandle outhandle,
                                                                  std_err = NoStream}
@@ -1571,7 +1572,7 @@ solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve"
           case exitCode2 of
             Just _ -> return ()
             Nothing -> liftIO $ do -- hPutStrLn stderr "timed out"
-                                   terminateProcess ph2
+                                   -- terminateProcess ph2
                                    -- hPutStrLn stderr "waiting for solver process to terminate"
                                    void $ waitForProcessMsg "waiting for terminated process" ph2
                                    -- hPutStrLn stderr "terminated"

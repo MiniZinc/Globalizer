@@ -65,6 +65,8 @@ import Types
 
 import SimpleLog
 
+import GlobalizerOptions as GOpts
+
 data AbortException = AbortException
   deriving (Show, Typeable)
 instance Exception AbortException
@@ -210,7 +212,7 @@ buildOutput replacements =
 
 
 --processGroupModels :: Bindings -> Maybe (Expression) -> [Model] -> StatisticsIO String
-processGroupModels dataFilePath env maybeContext models nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle = do
+processGroupModels dataFilePath env maybeContext models opts constraintFilter channelMap logHandle = do
 --  liftLog logNewGroup
   let m = head models
   SimpleLog.logPrint logHandle LogDebug m
@@ -234,7 +236,7 @@ processGroupModels dataFilePath env maybeContext models nRandomSolutions nSample
 --                                             SimpleLog.log $ plainShow m'
                                              SimpleLog.log logHandle LogDebug (plainShow m')
                                              void $ liftIO $ evaluate $ maybe 0 length reps
-                                             Just <$> processModelWrapper dataFilePath env maybeContext m' (reps :: Maybe [(Replacement,Double)]) nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle)
+                                             Just <$> processModelWrapper dataFilePath env maybeContext m' (reps :: Maybe [(Replacement,Double)]) opts constraintFilter channelMap logHandle)
                                           Nothing
                                           (zip [1..] models)
     case result of
@@ -298,12 +300,11 @@ timeScoreReplacement
      -> Model
      -> [Expression']
      -> Replacement
-     -> Int
-     -> Integer
+     -> GOpts.GlobalizerOptions
      -> SimpleLog.Handle
      -> StateT Statistics IO (Replacement, Double)
-timeScoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solvingTimeout logHandle = do
-  timeAction "scoreReplacement" (scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solvingTimeout logHandle)
+timeScoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
+  timeAction "scoreReplacement" (scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle)
 
 scoreReplacement
   :: String
@@ -312,11 +313,11 @@ scoreReplacement
      -> Model
      -> [Expression']
      -> Replacement
-     -> Int
-     -> Integer
+     -> GOpts.GlobalizerOptions
      -> SimpleLog.Handle
      -> StateT Statistics IO (Replacement, Double)
-scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solvingTimeout logHandle = do
+scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
+  let nSampleSolutions = GOpts.nSampleSolutions opts
   let newModel = Model {
                _modelItems =
                  map VarDeclI (topLevelVarDecls m) -- ++ usedVarDecls ++ usedParDecls)
@@ -338,7 +339,7 @@ scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solv
   -- when (True || name (fst c) == "sliding_sum") $ SimpleLog.log logHandle LogScoring $ (plainShow evalledNewModel)
   (_, csols) <-
     timeAction "scoreReplacement/solve" $
-      solve dataFilePath True evalledNewModel nSampleSolutions solvingTimeout logHandle
+      solve dataFilePath True evalledNewModel opts logHandle
   --      statisticsFlatZincCall
   -- liftIO $ atomically $ do x <- takeTMVar zincCalls
   --                          putTMVar zincCalls (x+1)
@@ -394,8 +395,8 @@ scoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solv
   SimpleLog.log logHandle LogScoring $ "goods: " ++ prettyPrintify c ++ ": " ++ show goods
   return $! (c, fromIntegral goods / fromIntegral nSampleSolutions :: Double)
 
-getGoodConstraints :: String -> Bindings -> Maybe (Expression) -> Model -> [Replacement] -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO (Maybe [(Replacement,Double)])
-getGoodConstraints dataFilePath env maybeContext m inter nSampleSolutions solvingTimeout logHandle = do
+getGoodConstraints :: String -> Bindings -> Maybe (Expression) -> Model -> [Replacement] -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO (Maybe [(Replacement,Double)])
+getGoodConstraints dataFilePath env maybeContext m inter opts logHandle = do
   SimpleLog.log logHandle LogDebug "get good constraints"
   zincCalls <- liftIO $ newTMVarIO (0::Int)
   evalCalls <- liftIO $ newTMVarIO (0::Int)
@@ -408,7 +409,7 @@ getGoodConstraints dataFilePath env maybeContext m inter nSampleSolutions solvin
         let outVars = getVariablesInConstraints m
         scoresAndContexts <- do
 --      SimpleLog.logN logHandle LogHigh "s"
-          result <- timeScoreReplacement dataFilePath env maybeContext m outVars c nSampleSolutions solvingTimeout logHandle
+          result <- timeScoreReplacement dataFilePath env maybeContext m outVars c opts logHandle
           SimpleLog.logN logHandle LogHigh $ "."
           return result
         return $! scoresAndContexts -- (maximumBy compareReplacementAndContext scoresAndContexts)
@@ -877,28 +878,29 @@ cartesianProduct1 = cartesianProduct' [] . reverse
 
 -- Does the model have exactly two constraints, and does one
 -- constraint seem to imply the other?
-impliesCheck :: String -> Bindings -> Model -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO Bool
-impliesCheck dataFilePath env m nRandomSolutions solvingTimeout logHandle = do
+impliesCheck :: String -> Bindings -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO Bool
+impliesCheck dataFilePath env m opts logHandle = do
     SimpleLog.log logHandle LogSolving "Starting implies check"
     result <-
       case filter isConstraintI (m ^. modelItems) of
         [c1,c2] -> do let m' = m & modelItems %~ filter (not . isConstraintI)
-                      i1 <- impliesCheck2 dataFilePath env m' c1 c2 nRandomSolutions solvingTimeout logHandle
+                      i1 <- impliesCheck2 dataFilePath env m' c1 c2 opts logHandle
                       if i1 then return True
-                        else impliesCheck2 dataFilePath env m' c2 c1 nRandomSolutions solvingTimeout logHandle
+                        else impliesCheck2 dataFilePath env m' c2 c1 opts logHandle
         _ -> return False
     SimpleLog.log logHandle LogSolving $ "Implies check returns: " ++ show result
     return result
 
 -- See if C1 implies C2 in the context of model M (which has no other
 -- constraints).
-impliesCheck2 :: String -> Bindings -> Model -> Item -> Item -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO Bool
-impliesCheck2 dataFilePath env m c1 c2 nRandomSolutions solvingTimeout logHandle = do
+impliesCheck2 :: String -> Bindings -> Model -> Item -> Item -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO Bool
+impliesCheck2 dataFilePath env m c1 c2 opts logHandle = do
+    let nRandomSolutions = GOpts.nRandomSolutions opts
     -- Find some solutions to M+C1.
     SimpleLog.log logHandle LogDebug "impliesCheck2"
     (_, sols1) <-
       timeAction "impliesCheck2/solve" $
-      solve dataFilePath True (m & modelItems %~ (c1:)) nRandomSolutions solvingTimeout logHandle
+      solve dataFilePath True (m & modelItems %~ (c1:)) opts logHandle
     if length sols1 < nRandomSolutions
       then do
         -- Didn't get enough solutions to determine implication.
@@ -992,17 +994,12 @@ processModelWrapper :: String
                     -> Maybe (Expression)
                     -> Model
                     -> Maybe [(Replacement,Double)]
-                    -> Int
-                    -> Int
-                    -> Integer
+                    -> GOpts.GlobalizerOptions
                     -> Maybe String
-                    -> Bool
-                    -> Int
-                    -> Bool
                     -> ChannelMap
                     -> SimpleLog.Handle
                     -> StatisticsIO [(Replacement,Double)]
-processModelWrapper dataFilePath env maybeContext m maybeReps nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle = do
+processModelWrapper dataFilePath env maybeContext m maybeReps opts constraintFilter channelMap logHandle = do
   let innerHandler action = 
           catching failedProcessReason action $ \_ -> do
             -- case fpr of
@@ -1017,7 +1014,7 @@ processModelWrapper dataFilePath env maybeContext m maybeReps nRandomSolutions n
                                              ++ "\nin this model:\n" ++ plainShow m
                               _ <- liftIO $ exitFailure
                               return []
-  outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle
+  outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps opts constraintFilter channelMap logHandle
   -- result <- trying _ErrorCall (processModel m maybeReps)
   -- case result of
   --   Left err -> error $ "processModelWrapper caught: " ++ err
@@ -1032,8 +1029,11 @@ processModelWrapper dataFilePath env maybeContext m maybeReps nRandomSolutions n
 
 
 -- Prepare a model to have its solutions sampled.
-prepareModel :: String -> Bindings -> Model -> Int -> Integer -> Bool -> SimpleLog.Handle -> StatisticsIO (Model)
-prepareModel dataFilePath env m nRandomSolutions solvingTimeout doImpliesCheck logHandle = do
+prepareModel :: String -> Bindings -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO (Model)
+prepareModel dataFilePath env m opts logHandle = do
+  let nRandomSolutions = GOpts.nRandomSolutions opts
+  let solvingTimeout = GOpts.solvingTimeout opts
+  let doImpliesCheck = GOpts.doImpliesCheck opts
   -- Alter the search annotation and output item.
   let modelToSolve = replaceOutput . replaceSearch $ m
 
@@ -1042,7 +1042,7 @@ prepareModel dataFilePath env m nRandomSolutions solvingTimeout doImpliesCheck l
   statisticsTime "implies check" $ do
     implies <-
         if doImpliesCheck
-        then impliesCheck dataFilePath env modelToSolve nRandomSolutions solvingTimeout logHandle
+        then impliesCheck dataFilePath env modelToSolve opts logHandle
         else return False
     when implies $ do
       SimpleLog.log logHandle LogSolving $ "implies check succeeded on this model: " ++ plainShow modelToSolve
@@ -1060,23 +1060,21 @@ processModel :: String
              -> Maybe (Expression)
              -> Model
              -> Maybe [(Replacement,Double)]
-             -> Int
-             -> Int
-             -> Integer
+             -> GOpts.GlobalizerOptions
              -> Maybe String
-             -> Bool
-             -> Int
-             -> Bool
              -> ChannelMap
              -> SimpleLog.Handle
              -> StatisticsIO [(Replacement,Double)]
-processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle = do
+processModel dataFilePath env maybeContext m' maybeReps opts constraintFilter channelMap logHandle = do
+  let nRandomSolutions = GOpts.nRandomSolutions opts
+  let filterArgs = GOpts.filterArguments opts
+  let maxArgs = GOpts.maxArguments opts
   -- Add the context to the model.
   let m = Language.MiniZinc.evalModelArraySlices (m' & modelItems %~ (++ (maybe [] ((:[]) . ConstraintI) maybeContext)))
 
   SimpleLog.log logHandle LogHigh $ "about to solve model"
 
-  modelToSolve <- prepareModel dataFilePath env m nRandomSolutions solvingTimeout doImpliesCheck logHandle
+  modelToSolve <- prepareModel dataFilePath env m opts logHandle
 
   (result, solutions) <- statisticsTime "solving model" $ do
     SimpleLog.log logHandle LogSolving $ "solving model..."
@@ -1084,7 +1082,7 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
     -- Find some random solutions.
     (result, solutions') <-
       timeAction "processModel/solve" $
-      solve dataFilePath True modelToSolve nRandomSolutions solvingTimeout logHandle
+      solve dataFilePath True modelToSolve opts logHandle
     -- mapM_ (SimpleLog.logPrintCat LogSolving) solutions'
     SimpleLog.log logHandle LogSolving "done solving model, counting solutions..."
     void $ liftIO $ evaluate $ length solutions'
@@ -1369,7 +1367,7 @@ processModel dataFilePath env maybeContext m' maybeReps nRandomSolutions nSample
   SimpleLog.log logHandle LogConstraints $ "about to measure constraint strength; there are " ++ show (length strongestOnly)
   forM_ strongestOnly $ \c -> do
     SimpleLog.log logHandle LogConstraints $ show c
-  maybeGoodOnes <- getGoodConstraints dataFilePath env maybeContext m strongestOnly nSampleSolutions solvingTimeout logHandle
+  maybeGoodOnes <- getGoodConstraints dataFilePath env maybeContext m strongestOnly opts logHandle
   SimpleLog.log logHandle LogConstraints $ "maybeGoodOnes: " ++ show maybeGoodOnes
   case maybeGoodOnes of
     -- If getGoodConstraints returns Nothing, it means that no
@@ -1515,8 +1513,10 @@ replaceIdent before after x = rewriteBi f x
 makePar :: VarDecl -> VarDecl
 makePar vd = vd { _varDeclTypeInst = (_varDeclTypeInst vd) { tiInst = Par } }
 
-solve :: String -> Bool -> Model -> Int -> Integer -> SimpleLog.Handle -> StatisticsIO (SolveResult, [Model])
-solve dataFilePath restart m nsols solvingTimeout logHandle = timeAction "solve" $ do
+solve :: String -> Bool -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO (SolveResult, [Model])
+solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
+ let nsols = GOpts.nRandomSolutions opts
+ let solvingTimeout = GOpts.solvingTimeout opts
  statisticsFlatZincCall
  --gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
  --dataFilePath <- liftIO $ getDataFileName "data-files"
@@ -1639,8 +1639,10 @@ splitSolutions outputBlob =
 
 type GroupName = (Integer, (DisjointLocation, Maybe (Expression)))
 
-runGroupsModels :: String -> Bindings -> M.Map GroupName (S.Set (Model), Maybe (Expression)) -> Int -> Int -> Integer -> Maybe String -> Maybe Int -> Bool -> Int -> Bool -> ChannelMap -> SimpleLog.Handle -> StatisticsIO [[(Replacement, Double)]]
-runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck channelMap logHandle = do
+runGroupsModels :: String -> Bindings -> M.Map GroupName (S.Set (Model), Maybe (Expression)) -> GOpts.GlobalizerOptions -> Maybe String -> ChannelMap -> SimpleLog.Handle -> StatisticsIO [[(Replacement, Double)]]
+runGroupsModels dataFilePath env groupMap opts constraintFilter channelMap logHandle = do
+  let selectGroup = GOpts.selectGroup opts
+
   let runGroup :: Integer -> (GroupName, (S.Set (Model), Maybe (Expression)))
                -> IO ([(Replacement, Double)], Statistics)
       runGroup groupNumber (ranges,(files, context)) = do
@@ -1661,7 +1663,7 @@ runGroupsModels dataFilePath env groupMap nRandomSolutions nSampleSolutions solv
         (out,st) <- flip runStateT emptyStatistics $ do
                       flip catch (\AbortException -> return ([])) $ do
                         statisticsTime (T.pack ("group " ++ show groupNumber)) $ do
-                          processGroupModels dataFilePath env context (S.toList files) nRandomSolutions nSampleSolutions solvingTimeout constraintFilter filterArgs maxArgs doImpliesCheck channelMap logHandle
+                          processGroupModels dataFilePath env context (S.toList files) opts constraintFilter channelMap logHandle
 
         -- Look for channel constraints.
         -- forM_ out $ \((c, args),_) -> do

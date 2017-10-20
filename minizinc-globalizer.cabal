@@ -39,6 +39,7 @@ executable minizinc-globalizer
                      Statistics
                      Submodel
                      Transform
+                     GlobalizerOptions
                      Types
   build-depends:       aeson >= 0.8.0.2
                      , aeson-pretty >= 0.7.2

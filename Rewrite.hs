@@ -36,6 +36,9 @@ import Prelude hiding (log)
 
 import System.FilePath
 
+import GlobalizerOptions as GOpts
+
+
 --import Debug.Trace (trace)
 
 -- Given a model, return its submodel groups.
@@ -136,7 +139,7 @@ instantiate ((constraint, pairs):newConstraints) = do
           rest <- f pairs' cs
           return $ c : rest
 
-processModelAndData :: Maybe String -> Int -> FilePath -> [FilePath] -> Int -> Int -> Integer -> Maybe String -> Maybe Int -> Bool -> Int -> Bool -> [Item] -> ChannelMap -> SimpleLog.Handle
+processModelAndData :: GOpts.GlobalizerOptions -> Maybe String -> [Item] -> ChannelMap -> SimpleLog.Handle
                     -> IO (
                            [
                             (( GroupName, (S.Set (Model), Maybe (Expression)) ),
@@ -144,7 +147,11 @@ processModelAndData :: Maybe String -> Int -> FilePath -> [FilePath] -> Int -> I
                            ],
                            Statistics
                           )
-processModelAndData includeDir maxConstraints s datafiles nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck extraItems channelMap logHandle = do
+processModelAndData opts constraintFilter extraItems channelMap logHandle = do
+  let includeDir = GOpts.includeDir opts
+  let maxConstraints = GOpts.maxConstraints opts
+  let s = head $ inputFiles opts
+  let dataFiles = (tail (GOpts.inputFiles opts)) ++ (GOpts.dataFiles opts)
   ((o,modelMap),stats) <- runStatistics $ do
     originalModel0 <- liftIO (readModel s)
     let originalModel = originalModel0 & modelItems %~ (++extraItems)
@@ -179,7 +186,7 @@ processModelAndData includeDir maxConstraints s datafiles nRandomSolutions nSamp
 
     liftIO $ putStrLn $ "NUMGROUPS: " ++ show (length gs)
 
-    ds' <- liftIO (mapM readModel datafiles)
+    ds' <- liftIO (mapM readModel dataFiles)
     let ds = case ds' of
                [] -> [Model []]
                _ -> ds'
@@ -202,7 +209,7 @@ processModelAndData includeDir maxConstraints s datafiles nRandomSolutions nSamp
     let modelMap = M.fromList modelSets'
 
     let dataFilePath = (fromMaybe "./" includeDir)
-    o <- runGroupsModels dataFilePath env modelMap nRandomSolutions nSampleSolutions solvingTimeout constraintFilter selectGroup filterArgs maxArgs doImpliesCheck channelMap logHandle
+    o <- runGroupsModels dataFilePath env modelMap opts constraintFilter channelMap logHandle
     return (o, modelMap)
   return (zip (M.toList modelMap) o,stats)
 

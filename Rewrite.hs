@@ -1,7 +1,3 @@
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Rewrite where
@@ -184,7 +180,7 @@ processModelAndData opts constraintFilter extraItems channelMap logHandle = do
     --     statisticsTime (T.pack (show n)) $ do
     --       recordLogKey "model" (plainShow (head (fst g)))
 
-    liftIO $ putStrLn $ "NUMGROUPS: " ++ show (length gs)
+    liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length gs)
 
     ds' <- liftIO (mapM readModel dataFiles)
     let ds = case ds' of

@@ -1,6 +1,5 @@
 module Common where
 
-import Control.Applicative
 import Control.Lens
 import Data.Data.Lens
 import Data.List
@@ -27,20 +26,13 @@ argumentToExpression a = makeExp $
                       (map makeExp idxs)
       Blank                 -> error $ "argumentToExpression: Blank"
 
+argumentToIdent :: Argument -> Maybe String
 argumentToIdent (OrdinaryParameter (Ident i)) = Just i
 argumentToIdent (ErstwhileVariable i) = Just i
 argumentToIdent _ = Nothing
 
-
--- Strip a suffix from a list.
---
--- stripSuffix "def"    "abcdef" ==> Just "abc"
--- stripSuffix "abcdef" "abcdef" ==> Just ""
--- stripSuffix ""       "abcdef" ==> Just "abcdef"
--- stripSuffix "xyz"    "abcdef" ==> Nothing
 stripSuffix :: Eq a => [a] -> [a] -> Maybe [a]
 stripSuffix suffix xs = reverse <$> stripPrefix (reverse suffix) (reverse xs)
-
 
 appearsInConstraint :: Model -> Argument -> Bool
 appearsInConstraint m a =

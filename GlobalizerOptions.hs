@@ -5,20 +5,11 @@
 module GlobalizerOptions where
 
 import Control.Applicative
-import Control.Concurrent
-import Control.Lens
-import Control.Monad
-import Data.List
 import Data.Maybe
-import qualified Data.Set as S
-import System.IO
 import Data.Semigroup ((<>))
-import qualified Data.Monoid
 
 import Options.Applicative as O
 import SimpleLog
-
-import Language.MiniZinc
 
 data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
                        , dataFiles :: [String]

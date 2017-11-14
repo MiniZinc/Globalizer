@@ -6,30 +6,19 @@ module Submodel where
 import Control.Applicative
 import Control.Lens hiding (Context)
 import Control.Monad
-import Control.Monad.State.Strict
-import Data.Data
-import Data.Data.Lens
 import Data.Either
 import Data.List
-import Data.Monoid
 import qualified Data.Text as T
 import Language.MiniZinc
-import Language.MiniZinc.Bindings
 import Language.MiniZinc.Resolve
 import System.Environment
-import System.IO
-import System.IO.Unsafe
 
 import Loc
 import Normalisation
 import Statistics
-import Transform
-
-import Debug.Trace
 
 type Context = Maybe (Expression)
 type Submodel = (Model, Context)
-
 
 -- The submodels of a model, subject to a maximum number of constraint
 -- items.  The context does not count towards this maximum.
@@ -203,9 +192,12 @@ variants sm = do
        return $ ((Model (otherItems ++ newItems ++ [ConstraintI megaConstraint])))
 --  return $ ((Model (otherItems ++ [ConstraintI cv] ++ map ConstraintI otherConstraints), context), unrollset)
 
+wrapper :: [String] -> [(VarDecl, Expression)] -> [Item]
 wrapper leaderIdents unrollSet =
     [ VarDeclI (vd & varDeclExpression .~ Just (makeExp (Ident leaderident)))
     | (vd, leaderident) <- zip (map fst unrollSet) leaderIdents ]
+
+wrapLet :: [String] -> Expression -> [(VarDecl, Expression)] -> Expression
 wrapLet leaderIdents body unrollSet =
 
     -- makeExp $ Let [ VarDeclI (VarDecl parInt ident (Just (makeExp (Ident leaderident))) mempty mempty)
@@ -257,22 +249,20 @@ instantiations m = do
               in if all targetGen gens
                  then do
                    let vdexppairs = [ (vd,ge) | gen <- gens, let ge = gen ^. genExp, vd <- gen ^. genVarDecls ]
-                   vds2 <- forM vdexppairs $ \(vd,e) -> do
+                   vds2 <- forM vdexppairs $ \(vd,e') -> do
                                      which <- [ "min", "max" ]
-                                     return (vd & varDeclExpression .~ Just (makeExp (Call which [e])))
+                                     return (vd & varDeclExpression .~ Just (makeExp (Call which [e'])))
                    return $ ConstraintI (comp ^. compBody)
                             : [ VarDeclI vd | vd <- vds2 ]
                  else return [ConstraintI e]
           _ -> return [ConstraintI e]
     f i = return [i]
 
+targetGen :: Generator -> Bool
 targetGen g =
     case g ^. genVarDecls of
       [vd] -> "LEADER_" `isPrefixOf` (vd ^. varDeclIdent)
       _ -> False
-
-
-
 
 getGroups :: Int -> Model -> [([Model],Maybe (Expression))]
 getGroups maxConstraints m = do
@@ -282,28 +272,15 @@ getGroups maxConstraints m = do
   -- return $! trace (showVariant v) ()
   return (instantiations v, c)
 
-
+testSubmodels :: IO ((), Statistics)
 testSubmodels = do
   Right m <- parseModelFile "tests/test-unroll.mzn"
   runStatistics $ do
-    forM_ (zip [0..] (submodels 2 m)) $ \(n,(sm,c)) -> do
+    forM_ (zip [0..] (submodels 2 m)) $ \(n,(sm,_)) -> do
       recordLogKey (T.pack (show n)) (fznShow sm)
     writeLog "submodels.json"
 
--- initialNormalisation :: forall a. (Loc a, Monoid a, Data a, Typeable a, Eq a)
---            => [ Model a -> Maybe (Model a) ]
--- initialNormalisation =
---     [ --transformConstraintExpressions collectForalls
---       monadToMaybe.transformMOnOf (template :: Traversal' (Model a) [Generator a]) template (monadify separateGenerators)
---     -- , splitConjunctions2
---     -- , removeTrivialConstraints
---     -- , transformConstraintExpressions splitConjunctionInForall
---     ]
-
--- rewriteModel :: (Monoid a, Data a, Typeable a, Eq a)
---              => [ Model a -> Maybe (Model a) ] -> Model a -> Model a
--- rewriteModel rewritings = rewriteOf ignored (\x -> msum [ r x | r <- rewritings ])
-
+testVariants :: FilePath -> IO ((), Statistics)
 testVariants file = do
   Right m <- parseModelFile file
   let m2 = rewriteModel initialNormalisation m
@@ -320,10 +297,11 @@ testVariants file = do
               recordLogKey (T.pack ("instantiation " ++ show n3)) (plainShow sm3)
     writeLog "submodels.json"
 
+main :: IO ((), Statistics)
 main = do
   [file] <- getArgs
   testVariants file
-  
+
+showUnrollSet :: [(VarDecl, Expression)] -> String
 showUnrollSet us = "{" ++ intercalate ", " (map f us) ++ "}"
   where f (vd,e) = "(" ++ showVarDecl vd ++ ", " ++ showExp e ++ ")"
-

@@ -2,7 +2,6 @@
 
 module Rewrite where
 
-import Debug.Trace
 import Language.MiniZinc
 import Data.Maybe
 import Data.Ord
@@ -30,12 +29,8 @@ import SimpleLog
 
 import Prelude hiding (log)
 
-import System.FilePath
-
 import GlobalizerOptions as GOpts
 
-
---import Debug.Trace (trace)
 
 -- Given a model, return its submodel groups.
 --
@@ -43,12 +38,12 @@ import GlobalizerOptions as GOpts
 -- context (the context may be absent).  Within a group, the unrolled
 -- variables are instantiated differently.
 newSubmodel :: Int -> Model -> [([Model],Maybe (Expression))]
-newSubmodel maxConstraints m = do
+newSubmodel maxCons m = do
   let otherItems = filter (not . isConstraintI) (m ^. modelItems)
   (cs,ctexts) <- newSubmodel' m
-  guard (length cs <= maxConstraints)
-  let instantiations = instantiate cs
-  let models = do assigns <- instantiations
+  guard (length cs <= maxCons)
+  let insts = instantiate cs
+  let models = do assigns <- insts
                   return $ Model $ otherItems ++ assigns
   c <- Nothing : map Just ctexts
 --  guard (c == Nothing)
@@ -143,9 +138,9 @@ processModelAndData :: GOpts.GlobalizerOptions -> Maybe String -> [Item] -> Chan
                            ],
                            Statistics
                           )
-processModelAndData opts constraintFilter extraItems channelMap logHandle = do
-  let includeDir = GOpts.includeDir opts
-  let maxConstraints = GOpts.maxConstraints opts
+processModelAndData opts consFilter extraItems channelMap logHandle = do
+  let incDir = GOpts.includeDir opts
+  let maxCons = GOpts.maxConstraints opts
   let s = head $ inputFiles opts
   let dataFiles = (tail (GOpts.inputFiles opts)) ++ (GOpts.dataFiles opts)
   ((o,modelMap),stats) <- runStatistics $ do
@@ -162,7 +157,7 @@ processModelAndData opts constraintFilter extraItems channelMap logHandle = do
       , "after:"
       , plainShow normalisedModel
       , "" ]
-    let gs = getGroups maxConstraints normalisedModel
+    let gs = getGroups maxCons normalisedModel
 
     -- liftIO $ forM_ gs $ \ (ms, context) -> do
     --   logN logHandle LogHigh "\nGROUP, "
@@ -187,7 +182,7 @@ processModelAndData opts constraintFilter extraItems channelMap logHandle = do
                [] -> [Model []]
                _ -> ds'
 
-    let bothglobMznPath = (fromMaybe "./" includeDir) ++ "/both-glob.mzn"
+    let bothglobMznPath = (fromMaybe "./" incDir) ++ "/both-glob.mzn"
 
     globalsModel <- liftIO (stripMetadataModel . (either (const (error "no both-glob.mzn?")) id) <$> parseModelFile bothglobMznPath)
     let env = topLevelBindings (stripMetadataModel globalsModel)
@@ -204,8 +199,8 @@ processModelAndData opts constraintFilter extraItems channelMap logHandle = do
     let modelSets' = filter (not . S.null . fst . snd) (modelSets)
     let modelMap = M.fromList modelSets'
 
-    let dataFilePath = (fromMaybe "./" includeDir)
-    o <- runGroupsModels dataFilePath env modelMap opts constraintFilter channelMap logHandle
+    let dataFilePath = (fromMaybe "./" incDir)
+    o <- runGroupsModels dataFilePath env modelMap opts consFilter channelMap logHandle
     return (o, modelMap)
   return (zip (M.toList modelMap) o,stats)
 
@@ -229,11 +224,9 @@ connected m =
 testGroups :: MonadIO m => FilePath -> m [([Model], Maybe Expression)]
 testGroups filename = do
   originalModel <- liftIO (readModel filename)
-  let maxConstraints = 1
+  let maxCons = 1
   let normalisedModel = rewriteModel initialNormalisation originalModel
-  -- log logHandle LogDebug (plainShow originalModel)
-  -- log logHandle LogDebug (plainShow normalisedModel)
-  return $ getGroups maxConstraints normalisedModel
+  return $ getGroups maxCons normalisedModel
 
 testMain :: IO ()
 testMain = testMain' "tests/test-unroll.mzn"

@@ -4,11 +4,9 @@ module Normalisation where
 
 import Control.Lens
 import Control.Monad
-import Data.Data
 import Data.Data.Lens
 import Data.List
 import Data.Maybe
-import Data.Monoid
 import Language.MiniZinc
 import Language.MiniZinc.Bindings
 
@@ -54,7 +52,7 @@ separateGenerators gens =
        then Nothing
        else Just gens'
   -- We throw away the location here ("Nothing") because it's no longer correct.
-  where f (Generator vds is loc) = [Generator [vd] is Nothing | vd <- vds]
+  where f (Generator vds is _) = [Generator [vd] is Nothing | vd <- vds]
 
 
 -- Inline predicate calls.

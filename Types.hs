@@ -4,8 +4,6 @@
 
 module Types where
 
-import Control.DeepSeq
---import Control.DeepSeq.TH
 import Data.Serialize
 import GHC.Generics
 

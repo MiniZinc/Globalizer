@@ -5,21 +5,16 @@ module Loc where
 
 import Control.Lens
 import Data.Data
-import Data.Data.Lens
 import Data.List
-import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Language.MiniZinc
 import Text.Printf
 
-
 modelConstraintLocations :: Model -> DisjointLocation
 modelConstraintLocations m = locComb $ do
   ConstraintI e <- m ^. modelItems
---  map (\l -> DisjointLocation [l]) $ catMaybes $ map _expLocation (universeOf subExpressions e)
   map (\l -> DisjointLocation [l]) $ e ^.. visitLocationsExp
---  concat ( e ^.. subExpressions )
 
 expConstraintLocations :: Expression -> DisjointLocation
 expConstraintLocations e =
@@ -47,8 +42,8 @@ instance Loc () where
 
 instance Loc DisjointLocation where
     locCombine = condenseDisjointLocation . DisjointLocation . concat . map unDisjointLocation
---    locCombine = DisjointLocation . concat . map unDisjointLocation
 
+locComb :: [DisjointLocation] -> DisjointLocation
 locComb = condenseDisjointLocation . DisjointLocation . concat . map unDisjointLocation
 
 newtype DisjointLocation = DisjointLocation { unDisjointLocation :: [Location] }
@@ -56,18 +51,6 @@ newtype DisjointLocation = DisjointLocation { unDisjointLocation :: [Location] }
 
 locExp :: Expression' -> Expression
 locExp e' = mkExp e'
--- { _expDecoration = ()
---                   , _expAnnotations = mempty
---                   , _expRawExpression = e'
---                   , _expLocation = Nothing
--- case mkExp e' ^.. subExpressions of
---                                           [] -> Nothing
---                                           es -> Just $ locComb $
---                                                   map (\l -> DisjointLocation [l]) $ catMaybes $ map _expLocation es
---                       }
-
--- makeDisjointLocation :: Model -> Model DisjointLocation
--- makeDisjointLocation = over mapped (\l -> DisjointLocation [l])
 
 condenseDisjointLocation :: DisjointLocation -> DisjointLocation
 condenseDisjointLocation (DisjointLocation locs) = DisjointLocation $

@@ -23,13 +23,13 @@ is1DArray env x =
 --        (getSolutionIdentifier x 1 >>= \i -> lookupTypeInst i env)
 
 is2DArray :: Bindings -> Argument -> Bool
-is2DArray env (ArgumentArrayAccess _ _) = False
+is2DArray _ (ArgumentArrayAccess _ _) = False
 is2DArray env x =
   maybe False typeInstIs2DArray
         (lookupTypeInst (fromMaybe (error ("is2DArray: " ++ show x)) (getIdentifier x)) env)
 
 is3DArray :: Bindings -> Argument -> Bool
-is3DArray env (ArgumentArrayAccess _ _) = False
+is3DArray _ (ArgumentArrayAccess _ _) = False
 is3DArray env x =
   maybe False typeInstIs3DArray
         (lookupTypeInst (fromMaybe (error ("is3DArray: " ++ show x)) (getIdentifier x)) env)
@@ -44,7 +44,7 @@ isInt env x = fromMaybe False $ do
                 ti <- lookupTypeInst vid env
                 return $ typeInstIsInt ti
 
-typeInstIsArray,typeInstIs1DArray,typeInstIs2DArray,typeInstIsVar
+typeInstIsArray,typeInstIs1DArray,typeInstIs2DArray,typeInstIs3DArray,typeInstIsVar
   :: TypeInst -> Bool
 typeInstIsArray (TypeInst { tiRanges = OrdinaryRanges rs }) = length rs > 0
 typeInstIsArray _ = error "typeInstIsArray"

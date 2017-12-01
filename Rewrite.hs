@@ -148,32 +148,9 @@ processModelAndData opts consFilter extraItems channelMap logHandle = do
     let originalModel = originalModel0 & modelItems %~ (++extraItems)
     let normalisedModel = rewriteModel initialNormalisation originalModel
     log logHandle LogNormalisation $ unlines
-      [ ""
-      , "NORMALISATION"
-      , ""
-      , "before:"
-      , plainShow originalModel
-      , ""
-      , "after:"
-      , plainShow normalisedModel
-      , "" ]
+      [ "", "NORMALISATION", "", "before:", plainShow originalModel, ""
+      , "after:", plainShow normalisedModel, "" ]
     let gs = getGroups maxCons normalisedModel
-
-    -- liftIO $ forM_ gs $ \ (ms, context) -> do
-    --   logN logHandle LogHigh "\nGROUP, "
-    --   let loc = modelConstraintLocations (head ms)
-    --   log logHandle LogHigh $ "location: " ++ showDisjointLocation loc
-    --   log logHandle LogHigh $ "context: " ++ case context of
-    --                                            Just e -> showExp e
-    --                                            Nothing -> "<none>"
-    --   log logHandle LogHigh $ ""
-    --   forM_ ms $ \m -> do
-    --     log logHandle LogHigh $ plainShow $ m
-
-    -- statisticsTime "groups" $ do
-    --   forM_ (zip [0..] gs) $ \(n,g) -> do
-    --     statisticsTime (T.pack (show n)) $ do
-    --       recordLogKey "model" (plainShow (head (fst g)))
 
     liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length gs)
 
@@ -239,9 +216,4 @@ testMain' filename = do
     putStrLn $ "location: " ++ showDisjointLocation "unknown" loc
     forM_ ms $ \m -> do
       putStrLn . plainShow $ m
-
--- main :: IO ()
--- main = do
---   (m:d) <- getArgs
---   test' m d
 

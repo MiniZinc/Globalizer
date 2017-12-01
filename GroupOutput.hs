@@ -181,18 +181,20 @@ replaceOutput m =
                           let i = vd ^. varDeclIdent ]
         newOutput = OutputI $ makeExp $ ArrayLit [ makeExp $ Call "show" [makeExp $ Ident i] | i <- varIdents ] [(1,genericLength varIdents)]
    in m & modelItems .~ (otherItems ++ [newOutput])
-                                                                 
-                      
-replaceSearch :: Model -> Model
-replaceSearch m = modelItems %~ ((++ newSolveItems) . filter (not . isSolveI)) $ m
+
+
+replaceSearch :: GlobalizerOptions -> Model -> Model
+replaceSearch opts m = modelItems %~ ((++ newSolveItems) . filter (not . isSolveI)) $ m
   where newSolveItems =
-            -- We used to use "random" as the variable selection here,
-            -- but sometimes it's terrible.  Instead we use a good
-            -- variable selection, but keep the random value selection
-            -- to encourage diversity in solutions.
-            [ SolveI (Annotations [makeExp $ Call "int_default_search" [makeExp $ Call "dom_w_deg" [], makeExp $ Call "indomain_random" []]]) Nothing SolveSatisfy
-            , IncludeI "gecode.mzn" Nothing
-            ]
+         -- We used to use "random" as the variable selection here,
+         -- but sometimes it's terrible.  Instead we use a good
+         -- variable selection, but keep the random value selection
+         -- to encourage diversity in solutions.
+         [ if GOpts.freeSearch opts
+           then SolveI (Annotations [makeExp $ Call "int_default_search" [ makeExp $ Call "dom_w_deg" [], makeExp $ Call "indomain_random" []]]) Nothing SolveSatisfy
+           else SolveI (Annotations []) Nothing SolveSatisfy
+         , IncludeI "gecode.mzn" Nothing ]
+
 
 buildOutput :: [(Replacement, Double)] -> String
 buildOutput replacements =
@@ -667,11 +669,8 @@ check _ _nsols "count_geq" [x,_,_] =
   -- FORBIDDEN
   False && isVariable x
 check _ _nsols "cumulative" [s,d,r,_] =
-    -- is1DArray bs s
-    -- && is1DArray bs d
-    -- && is1DArray bs r
-    -- && isInt bs b
-    (isVariable s || isVariable d || isVariable r)
+    (isVariable s || isVariable d || isVariable r) -- Implement isPositive
+    && isPositive d && isPositive r
     && s /= d && d /= r && s /= r
 check bs nsols "cumulative_assert" args = check bs nsols "cumulative" args
 check _ _nsols "decreasing" [x] = isVariable x -- && is1DArray bs x
@@ -743,6 +742,11 @@ isVariable (ArgumentArrayAccess a _) = isVariable a
 isVariable _ = False
 isNotVariable :: Argument -> Bool
 isNotVariable = not . isVariable
+
+isPositive :: Argument -> Bool
+isPositive a = case instantiate' a ^. expRawExpression of
+                 IntLit x -> x > 0
+                 _ -> False
 
 -- Make sure at least one argument is a variable.
 argCheck :: [Argument] -> Bool
@@ -962,11 +966,6 @@ processModelWrapper :: String
 processModelWrapper dataFilePath env maybeContext m maybeReps opts consFilter channelMap logHandle = do
   let innerHandler action = 
           catching failedProcessReason action $ \_ -> do
-            -- case fpr of
-            -- --   NoSolutions -> liftIO $ hPutStrLn stderr $ "(no solutions)" -- \nin this submodel:\n" ++ plainShow m
-            --   ImpliesCheck -> liftIO $ hPutStrLn stderr $ "(implies check succeeded)" -- on this submodel:\n" ++ plainShow m ++ "\nwith this context: " ++ maybe "(no context)" showExp maybeContext
-            -- --   TooBig -> liftIO $ hPutStrLn stderr $ "(too big)"
-            --   _ -> return ()
             return []
       outerHandler :: StatisticsIO [(Replacement,Double)] -> StatisticsIO [(Replacement,Double)]
       outerHandler action = catch action $ \err -> do
@@ -975,28 +974,15 @@ processModelWrapper dataFilePath env maybeContext m maybeReps opts consFilter ch
                               _ <- liftIO $ exitFailure
                               return []
   outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps opts consFilter channelMap logHandle
-  -- result <- trying _ErrorCall (processModel m maybeReps)
-  -- case result of
-  --   Left err -> error $ "processModelWrapper caught: " ++ err
-  --   Right x -> return x
-  -- catch 
-        
-  -- catching failedProcessReason (processModel env m maybeReps) $ \fpr -> do
-  --     case fpr of
-  --       NoSolutions -> liftIO $ hPutStrLn stderr $ "no solutions\nin this submodel:\n" ++ plainShow m
-  --       ImpliesCheck -> liftIO $ hPutStrLn stderr $ "(implies check succeeded)"
-  --     return []
-
 
 -- Prepare a model to have its solutions sampled.
 prepareModel :: String -> Bindings -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO (Model)
 prepareModel dataFilePath env m opts logHandle = do
   let doImpliesChk = GOpts.doImpliesCheck opts
   -- Alter the search annotation and output item.
-  let modelToSolve = replaceOutput . replaceSearch $ m
+  let modelToSolve = replaceOutput . (replaceSearch opts) $ m 
 
-  -- If the model has only two constraints and one implies the other,
-  -- give up.
+  -- If the model has only two constraints and one implies the other, give up.
   statisticsTime "implies check" $ do
     implies <-
         if doImpliesChk
@@ -1098,7 +1084,7 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
   let firstSolution = headNote "no solutions to submodel?" solutions
   let identifiersInSolution = --map firstWord (lines (firstSolution))
         map (\(AssignI x _) -> x) (_modelItems firstSolution)
-            
+
   -- At this point, constraintTemplateModel' no longer has the
   -- original declarations for variables --- they have been replaced
   -- by the per-solution versions.
@@ -1129,7 +1115,9 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
   let parVarDecls = filter isPar $ allVarDecls
 
   SimpleLog.log logHandle LogArgs $ "about to compute potential arguments..."
-  potentialArguments <- computePotentialArguments templateEnv identifiersInSolution parVarDecls allConstraintsExpression filterArgs channelMap logHandle
+  potentialArguments <- computePotentialArguments templateEnv identifiersInSolution
+                                                  parVarDecls allConstraintsExpression
+                                                  filterArgs  channelMap logHandle
 
   let baseEnv = topLevelBindings m
 
@@ -1169,8 +1157,8 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
 
   SimpleLog.log logHandle LogDebug "parVarDecls"
   mapM_ (SimpleLog.logPrint logHandle LogDebug) parVarDecls
---  SimpleLog.log "usedVarDecls"
---  mapM_ (SimpleLog.log . showVarDecl) usedVarDecls
+  --  SimpleLog.log "usedVarDecls"
+  --  mapM_ (SimpleLog.log . showVarDecl) usedVarDecls
   SimpleLog.log logHandle LogArgs "model:"
   SimpleLog.log logHandle LogArgs (plainShow m)
   SimpleLog.log logHandle LogArgs "context:"
@@ -1179,10 +1167,10 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
   let showArg Blank = "<blank>"
       showArg a = show (getArgType a) ++ ": " ++ show a
   mapM_ (SimpleLog.log logHandle LogArgs . showArg) potentialArguments
---   SimpleLog.log logHandle LogArgs "potentialArguments1Filtered"
---   let showArg Blank = "<blank>"
---       showArg a = show (getArgType a) ++ ": " ++ show a
--- --  mapM_ (SimpleLog.log logHandle LogArgs . showArg) potentialArguments1Filtered
+  --   SimpleLog.log logHandle LogArgs "potentialArguments1Filtered"
+  --   let showArg Blank = "<blank>"
+  --       showArg a = show (getArgType a) ++ ": " ++ show a
+  -- --  mapM_ (SimpleLog.log logHandle LogArgs . showArg) potentialArguments1Filtered
   SimpleLog.log logHandle LogArgs "(end of potential args)"
 
   let argumentsByType = M.fromListWith (++) [ (t,[a]) | a <- potentialArguments, let mt = getArgType a, isJust mt, let Just t = mt ]
@@ -1197,10 +1185,9 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
               , case consFilter of
                   Nothing -> True
                   Just s -> anyInfix s name ]
-  -- name == "bin_packing_capa"
 
   let constraintsToConsider = filter acceptableConstraint potentialConstraints
-  
+
   SimpleLog.log logHandle LogHigh $ "considering " ++ show (length constraintsToConsider) ++ " constraints"
 
   replacements <- forM constraintsToConsider $ \c -> statisticsTime (T.pack (show c)) $ do
@@ -1208,9 +1195,9 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
                                                      TooBig -> -- liftIO (hPutStrLn stderr ("(too big - " ++ show (name c) ++ ")")) >>
                                                                  return []
                                                      otherReason -> throwingM failedProcessReason otherReason) $ do
---    liftIO $ hPutStrLn stderr $ "calculating cartesian product for " ++ show c
+    --    liftIO $ hPutStrLn stderr $ "calculating cartesian product for " ++ show c
     SimpleLog.log logHandle LogConstraints $ "considering constraint " ++ name c
---    let cart = (cartesianProduct1 (replicate (length (argtypes c)) potentialArguments))
+    --    let cart = (cartesianProduct1 (replicate (length (argtypes c)) potentialArguments))
     let chooseArgument t = Blank : M.findWithDefault [] t argumentsByType
     let cart = mapM chooseArgument (argtypes c)
         numArgLists = length cart
@@ -1219,13 +1206,13 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
 
     when (numArgLists > maxArgs) $ do
       throwingM failedProcessReason TooBig
-    
---    liftIO $ hPutStrLn stderr $ "done (" ++ show (length cart) ++ ")"
+
+    --    liftIO $ hPutStrLn stderr $ "done (" ++ show (length cart) ++ ")"
     let rawargslist = cart
     evalCalls <- liftIO $ newTMVarIO (0::Int)
     replacements' <- statisticsTime "argumentlists" $ forM rawargslist $ \rawargs' -> statisticsTime (T.pack (show rawargs')) $ do
       -- when (True || name c == "maximum_int_checking") $
-      
+
       -- SimpleLog.log logHandle LogArgs $ "considering " ++ show rawargs'
       let rawargs = rawargs'
       -- SimpleLog.log logHandle LogArgs $ "filling in blanks... " ++ show rawargs'
@@ -1273,19 +1260,12 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
           recordLogKey "model to check" (plainShow modelToCheck)
           when (True || name c == "bin_packing_capa") $ SimpleLog.log logHandle LogChecking $ "CHECKING FOR: " ++ prettyPrintify (c,args) ++ " (there are " ++ show (length solutionAssignments) ++ " to check)"
           when (True || name c == "maximum_int_checking") $ SimpleLog.log logHandle LogChecking $ plainShow modelToCheck
-          -- logFlush
---          findResult <- liftIO $ try (return $! findUnsatisfiableConstraint env modelToCheck)
 
           -- Try to find an assignment that makes the model unsatisfiable.
           findResult <- try $ findM (\assigns -> do
-                                                          statisticsEvaluation
-                                                          return $ not (modelIsSatisfiable' env (modelToCheck & modelItems <>~ assigns))) solutionAssignments
---          recordLogKey "find result" (show findResult)
-          -- let unsatConstraint = case findResult of
-          --                         Right (Just c) -> Just c
-          --                         _ -> Nothing
---          let result2 = isJust unSatCon
---          void $ liftIO $ evaluate result2
+                                        statisticsEvaluation
+                                        return $ not (modelIsSatisfiable' env (modelToCheck & modelItems <>~ assigns))) solutionAssignments
+
           liftIO $ atomically $ do x <- takeTMVar evalCalls
                                    putTMVar evalCalls (x+1)
           when (True || name c == "bin_packing_capa") $ SimpleLog.log logHandle LogChecking $
@@ -1509,7 +1489,7 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
           let args2 =
                   [ "-n", (show nsols) ]
                   ++ (if restart && nsols > 0 then ["-restart", "luby"] else [])
-                  ++ ["-time", show $ fromIntegral (solveTimeout*1000)]
+                  ++ ["-time", show $ fromIntegral (solveTimeout)]
                   ++ ["-r", show randomSeed, fznpath ]
           (_,_,_,rp) <- createProcess (proc "fzn-gecode" args2) {std_out = UseHandle outhandle,
                                                                  std_err = NoStream}
@@ -1517,7 +1497,7 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
             SimpleLog.log logHandle LogDebug "starting fzn-gecode"
             SimpleLog.logN logHandle LogHigh $ "G"
             let p = rp
-            e <- liftIO $ timeout (fromIntegral (solveTimeout*1000)) (waitForProcessMsg "waiting for fzn-gecode" p)
+            e <- liftIO $ timeout (fromIntegral (solveTimeout)) (waitForProcessMsg "waiting for fzn-gecode" p)
             SimpleLog.logN logHandle LogHigh $ "\b"
             SimpleLog.log logHandle LogDebug "fzn-gecode done/killed"
             return (p, e)

@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 
 import Control.Applicative
-import Control.Concurrent
+import Control.Concurrent (setNumCapabilities)
 import Control.Lens
 import Control.Monad
 import Data.List
@@ -70,31 +70,28 @@ initialPass opts logHandle = do
 
 main2 :: GOpts.GlobalizerOptions -> IO ()
 main2 opts = do
+  -- Set number of jobs to run in parallel
   setNumCapabilities (numJobs opts)
+
+  -- Configure logging
   logHandle <- SimpleLog.newHandle (debugging opts) stderr
+
+  -- Perform the initial pass
   (extraItems, channelMap, initialPassStats) <-
     if doInitialPass opts
     then initialPass (opts { selectGroup = Nothing }) logHandle
     else return ([], [], emptyStatistics)
-  (o,s) <- -- flip catch (\AbortException -> print "abort abort" >> return undefined) $ do
-    processModelAndData opts (constraintFilter opts) extraItems channelMap logHandle
-  --  putStrLn (concatMap unlines (map buildOutput o))
-  -- forM_ pairedo $ \(((loc,context),m),o1) -> do
-  --   let name = showDisjointLocation loc
-  --              ++ " \\ "
-  --              ++ fromMaybe "" ((showDisjointLocation . view expDecoration) <$> context)
-  --   putStrLn name
-  --   -- putStrLn $ fznShow $ head $ S.toList $ fst m
-  --   putStrLn (buildOutput o1)
 
-  -- hPutStrLn stderr $ show $ stats ^. logTree
-  -- hPutStrLn stderr (showStatistics stats)
+  -- Run the full Globalizer
+  (o,s) <- processModelAndData opts (constraintFilter opts) extraItems channelMap logHandle
 
-  let nameReps :: [ (GroupName, Replacement, Expression) ]
-      nameReps = [ (name, replacement, constraint)
-                       | x <- o,
-                         let name = x ^. _1 ^. _1,
-                         (replacement,_s) <- x ^. _2,
+
+  -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t
+  let nameReps :: [ (GroupName, Replacement, Expression) ] 
+      nameReps =  [ (name, replacement, constraint)
+                       | x <- o, -- (GroupName, (S.Set (Model), Maybe (Expression)))
+                         let name = x ^. _1 ^. _1,  -- Groupname
+                         (replacement,_) <- x ^. _2, -- (S.Set (model), _)
                          let constraints = [ c | ConstraintI c <- (S.findMin (x ^. _1 ^. _2 ^. _1)) ^. modelItems ],
                          let constraint = head constraints ]
   let shadowed (n,r,_) = any (\(n2,r2,_) -> (n,r) /= (n2,r2) && r == r2 && n2 `subgroupOf` n) nameReps

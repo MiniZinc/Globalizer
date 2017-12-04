@@ -191,8 +191,8 @@ replaceSearch opts m = modelItems %~ ((++ newSolveItems) . filter (not . isSolve
          -- variable selection, but keep the random value selection
          -- to encourage diversity in solutions.
          [ if GOpts.freeSearch opts
-           then SolveI (Annotations [makeExp $ Call "int_default_search" [ makeExp $ Call "dom_w_deg" [], makeExp $ Call "indomain_random" []]]) Nothing SolveSatisfy
-           else SolveI (Annotations []) Nothing SolveSatisfy
+           then SolveI (Annotations []) Nothing SolveSatisfy
+           else SolveI (Annotations [makeExp $ Call "int_default_search" [ makeExp $ Call "dom_w_deg" [], makeExp $ Call "indomain_random" []]]) Nothing SolveSatisfy
          , IncludeI "gecode.mzn" Nothing ]
 
 

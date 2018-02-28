@@ -971,7 +971,7 @@ processModelWrapper dataFilePath env maybeContext m maybeReps opts consFilter ch
       outerHandler action = catch action $ \err -> do
                               _ <- liftIO $ hPutStrLn stderr $ "processModelWrapper caught: " ++ show (err::SomeException)
                                              ++ "\nin this model:\n" ++ plainShow m
-                              _ <- liftIO $ exitFailure
+                              --_ <- liftIO $ exitFailure
                               return []
   outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps opts consFilter channelMap logHandle
 
@@ -1509,7 +1509,8 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
                                    -- hPutStrLn stderr "waiting for solver process to terminate"
                                    void $ waitForProcessMsg "waiting for terminated process" ph2
                                    -- hPutStrLn stderr "terminated"
-                                   writeIORef wasKilled True
+                                   --writeIORef wasKilled True
+                                   return ()
           output <- do let attemptToRead = do
                              r <- try (BSC.readFile outpath)
                              case r of
@@ -1531,9 +1532,10 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
               SimpleLog.log logHandle LogSolving "parsing done"
               return (status, models)
             Left e -> do
-              wk <- readIORef wasKilled
-              if wk then return (SolveIncomplete, [])
-                    else error $ "error parsing solutions from solver:\n" ++ show e ++ "\n" ++ BSC.unpack output
+              return (SolveIncomplete, [])
+              --wk <- readIORef wasKilled
+              --if wk then return (SolveIncomplete, [])
+              --      else error $ "error parsing solutions from solver:\n" ++ show e ++ "\n" ++ BSC.unpack output
 
 splitSolutions :: String -> (SolveResult, [String])
 splitSolutions outputBlob =
@@ -1630,10 +1632,6 @@ runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle =
   -- statistics.
   (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited numCapabilities actions)
 
-  -- Report that execution is finished
-  let _ = do hPrintf stderr "%%%%%%mzn-progress 100.00\n"
-             hFlush stderr
-
   -- Glue the statistics from all the runs together.
   let combinedStats = mconcat stats
   void $ evaluate $ length guidoParts
@@ -1656,7 +1654,10 @@ stripped = fst . span (/='/') . tail . snd . break (=='/')
 concurrentlyLimited :: Int -> [IO a] -> IO [a]
 concurrentlyLimited n tasks = concurrentlyLimited' n (zip [0..] tasks) [] [] (length tasks)
 
-concurrentlyLimited' _ [] [] results ntasks = return . map snd $ sortBy (comparing fst) results
+concurrentlyLimited' _ [] [] results ntasks = do
+    hPrintf stderr "%%%%%%mzn-progress 100.00\n"
+    hFlush stderr
+    return . map snd $ sortBy (comparing fst) results
 concurrentlyLimited' 0 todo ongoing results ntasks = do
     (task, newResult) <- waitAny ongoing
     concurrentlyLimited' 1 todo (delete task ongoing) (newResult:results) ntasks

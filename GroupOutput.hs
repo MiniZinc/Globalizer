@@ -22,7 +22,6 @@ import Data.Data.Lens
 import Data.Foldable (toList)
 import Data.Generics.Uniplate.Data
 import qualified Data.IntMap as IM
-import Data.IORef
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
@@ -237,6 +236,7 @@ processGroupModels dataFilePath env maybeContext models opts consFilter channelM
                                           (zip [1..] models)
     case result of
       Left NoSolutions -> return []
+      Left TooBig -> return []
       Left ImpliesCheck -> statisticsSuccessfulImpliesCheck >> return []
       Right replacementList -> do
           let inter' = replacementList
@@ -797,6 +797,7 @@ chooseIndex ti =
                         IntLit u = ue ^. expRawExpression
                     in map (makeExp . IntLit) [l..u]
                 x -> error $ "chooseIndex: " ++ show x
+    Nothing -> undefined
 
 -- This is a specialised version of "sequence", but has better memory
 -- behaviour.  (For more information see
@@ -997,7 +998,7 @@ splitFilter :: String -> [String]
 splitFilter consFilter = map (\t -> T.unpack t) (T.splitOn (T.pack ",") (T.pack consFilter))
 
 anyInfix :: String -> String -> Bool
-anyInfix consFilter name = any (\s -> (s `isInfixOf` name)) (splitFilter consFilter)
+anyInfix consFilter call_id = any (\s -> (s `isInfixOf` call_id)) (splitFilter consFilter)
 
 processModel :: String
              -> Bindings
@@ -1129,7 +1130,7 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
                           tiDomain = Just (expRaw -> Ident i) } ->
                             fromMaybe (error ("couldn't look up \"" ++ i ++ "\"")) $ do
                               return $ ArgType ArgInt (genericLength rs)
-               ti -> error $ "getArgTypeIdent: unknown typeinst: " ++ show ti
+               ti' -> error $ "getArgTypeIdent: unknown typeinst: " ++ show ti'
 
   let getArgTypeIdent i =
           let ti = fromMaybe (error ("getArgTypeIdent: " ++ i)) $ lookupTypeInst i baseEnv
@@ -1179,12 +1180,12 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
   -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1)
   -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1Filtered)
 
-  let acceptableConstraint (Constraint name _) =
-          and [ name /= "atmost"
-              , name /= "atleast"
+  let acceptableConstraint (Constraint name' _) =
+          and [ name' /= "atmost"
+              , name' /= "atleast"
               , case consFilter of
                   Nothing -> True
-                  Just s -> anyInfix s name ]
+                  Just s -> anyInfix s name' ]
 
   let constraintsToConsider = filter acceptableConstraint potentialConstraints
 
@@ -1262,9 +1263,9 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
           when (True || name c == "maximum_int_checking") $ SimpleLog.log logHandle LogChecking $ plainShow modelToCheck
 
           -- Try to find an assignment that makes the model unsatisfiable.
-          findResult <- try $ findM (\assigns -> do
+          findResult <- try $ findM (\assignments -> do
                                         statisticsEvaluation
-                                        return $ not (modelIsSatisfiable' env (modelToCheck & modelItems <>~ assigns))) solutionAssignments
+                                        return $ not (modelIsSatisfiable' env (modelToCheck & modelItems <>~ assignments))) solutionAssignments
 
           liftIO $ atomically $ do x <- takeTMVar evalCalls
                                    putTMVar evalCalls (x+1)
@@ -1272,7 +1273,7 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
             case findResult of
               Left _ -> show findResult
               Right Nothing -> show findResult
-              Right (Just items) -> "Right Just " ++ plainShow (Model items)
+              Right (Just items') -> "Right Just " ++ plainShow (Model items')
           let success2 = case findResult of
                            Left (AssertFailed _) -> False
                            Left (EvalNotPar _) -> False
@@ -1294,8 +1295,8 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
     liftIO (atomically (takeTMVar evalCalls)) >>= statisticsEvaluationAdd
     return (catMaybes replacements')
 
-  let result = concat (replacements :: [[Replacement]])
-      strongestOnly = result -- strongestReplacements templateEnv result
+  let result' = concat (replacements :: [[Replacement]])
+      strongestOnly = result' -- strongestReplacements templateEnv result
 
   SimpleLog.log logHandle LogConstraints $ "about to measure constraint strength; there are " ++ show (length strongestOnly)
   forM_ strongestOnly $ \c -> do
@@ -1319,10 +1320,12 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
 bindSolution :: [Item] -> Bindings -> Bindings
 bindSolution sol bs = addAssignmentsToBindings (map toPair sol) bs
   where toPair (AssignI v e) = (v,e)
+        toPair _ = undefined
 
 fillInBlanks :: Constraint -> Bindings -> [[Item]] -> [Argument] -> [Argument]
 fillInBlanks (Constraint {name="maximum_int_checking"}) bs sols [ Blank, arg1 ] | arg1 /= Blank =
     let maxOfArrayLit (ArrayLit es _dims) = maximum $ map (fromJust . getInteger) es
+        maxOfArrayLit _ = undefined
         xsExpression' = argumentToExpression arg1 ^. expRawExpression
         suggestions = map (\sol -> let bs' = bindSolution sol bs
                                        arg1value = expressionToValue bs' xsExpression'
@@ -1355,6 +1358,7 @@ fillInBlanks (Constraint {name="gcc"}) bs solutionAssignments [ xs, Blank ] | xs
              if upper - lower > 100
              then Nothing
              else Just $ ArrayLit [ makeExp (IntLit c) | v <- [lower..upper], let c = genericLength (filter (==v) ints) ] [(fromIntegral lower,fromIntegral upper)]
+        gccOfArrayLit _ = undefined
 
         xsExpression' = argumentToExpression xs ^. expRawExpression
         suggestions = mapM (\assignments -> let bs' = bindSolution assignments bs
@@ -1449,93 +1453,70 @@ makePar vd = vd { _varDeclTypeInst = (_varDeclTypeInst vd) { tiInst = Par } }
 solve :: String -> Bool -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO (SolveResult, [Model])
 solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
  let nsols = GOpts.nRandomSolutions opts
- let solveTimeout = GOpts.solvingTimeout opts
+ let solveTimeout = fromIntegral $ GOpts.solvingTimeout opts
+ let minizincExe = fromMaybe "minizinc" $ GOpts.minizincPath opts
  statisticsFlatZincCall
- --gecodePath <- liftIO $ fromMaybe "/usr/local/share/gecode/mznlib" <$> lookupEnv "GECODE_MZN"
- --dataFilePath <- liftIO $ getDataFileName "data-files"
- --dataFilePath <- liftIO $ fromMaybe "data-files" <$> lookupEnv "GLOBALIZER_DIR"
  statisticsTime "solving via minizinc" $ liftIO $ do
   withTempFile "." "temp.mzn" $ \mznpath mznhandle -> do
     timeAction "solve/plainShow" $ hPutStrLn mznhandle (plainShow m)
     hClose mznhandle
 
-    -- SimpleLog.log $ plainShow m
-    withTempFile "." "temp.fzn" $ \fznpath fznhandle -> do
-      hClose fznhandle
-      withTempFile "." "output" $ \outpath outhandle -> do
-        withTempFile "." "mzn2fzn-output" $ \stderrPath stderrHandle -> do
-          let args = [ "--no-optimise"
-                     , "-G", "gecode"--gecodePath
-                     , "-I", dataFilePath
-                     , "--no-output-ozn"
-                     , "-o", fznpath
-                     , mznpath]
-          SimpleLog.logN logHandle LogHigh $ "C"
-          exitCode1 <-
-            timeAction "solve/mzn2fzn" $
-            runProcess "mzn2fzn" args Nothing Nothing Nothing Nothing (Just stderrHandle) >>= waitForProcessMsg "waiting for mzn2fzn"
+    withTempFile "." "output" $ \outpath outhandle -> do
+      withTempFile "." "error" $ \errpath errhandle -> do
+        randomSeed <- (randomIO :: IO Word32)
+        let gecodeSpecificArgs =
+                (if restart && nsols > 0 then "-restart luby" else "") ++ " " ++
+                "-r " ++ show randomSeed
+        let args =
+                [ "--no-optimise"
+                , "--solver", "org.gecode.gecode"
+                , "--output-mode", "dzn"
+                , "-I", dataFilePath
+                , "-n", (show nsols)
+                , "--fzn-time-limit"
+                , show $ solveTimeout
+                , "--fzn-flags", gecodeSpecificArgs
+                , mznpath]
+        (_,_,_,rp) <- createProcess (proc minizincExe args) {std_out = UseHandle outhandle,
+                                                             std_err = UseHandle errhandle}
+        (ph2,exitCode2) <- timeAction "solve/fzn-gecode" $ flip const ("gecode" :: String) $ do
+          SimpleLog.log logHandle LogDebug "starting fzn-gecode"
+          SimpleLog.logN logHandle LogHigh $ "G"
+          let p = rp
+          e <- liftIO $ timeout (solveTimeout) (waitForProcessMsg "waiting for fzn-gecode" p)
           SimpleLog.logN logHandle LogHigh $ "\b"
-          case exitCode1 of
-            ExitFailure code -> do
-                hPutStrLn stderr ("warning: mzn2fzn failed (exit code " ++ show code ++ ")")
-                -- hPutStrLn stderr ("on this model:")
-                -- hPutStrLn stderr $ plainShow m
-                hPutStrLn stderr ("and produced this output:")
-                hPutStrLn stderr =<< readFile stderrPath
-                return ()
-            ExitSuccess -> return ()
-          -- SimpleLog.log $ "mzn2fzn exit code: " ++ show exitCode1
-          randomSeed <- (randomIO :: IO Word32)
-          let args2 =
-                  [ "-n", (show nsols) ]
-                  ++ (if restart && nsols > 0 then ["-restart", "luby"] else [])
-                  ++ ["-time", show $ fromIntegral (solveTimeout)]
-                  ++ ["-r", show randomSeed, fznpath ]
-          (_,_,_,rp) <- createProcess (proc "fzn-gecode" args2) {std_out = UseHandle outhandle,
-                                                                 std_err = NoStream}
-          (ph2,exitCode2) <- timeAction "solve/fzn-gecode" $ flip const ("gecode" :: String) $ do
-            SimpleLog.log logHandle LogDebug "starting fzn-gecode"
-            SimpleLog.logN logHandle LogHigh $ "G"
-            let p = rp
-            e <- liftIO $ timeout (fromIntegral (solveTimeout)) (waitForProcessMsg "waiting for fzn-gecode" p)
-            SimpleLog.logN logHandle LogHigh $ "\b"
-            SimpleLog.log logHandle LogDebug "fzn-gecode done/killed"
-            return (p, e)
-          wasKilled <- newIORef False
-          case exitCode2 of
-            Just _ -> return ()
-            Nothing -> liftIO $ do -- hPutStrLn stderr "timed out"
-                                   -- terminateProcess ph2
-                                   -- hPutStrLn stderr "waiting for solver process to terminate"
-                                   void $ waitForProcessMsg "waiting for terminated process" ph2
-                                   -- hPutStrLn stderr "terminated"
-                                   --writeIORef wasKilled True
-                                   return ()
-          output <- do let attemptToRead = do
-                             r <- try (BSC.readFile outpath)
-                             case r of
-                               Right x -> return x
-                               Left exc -> do hPutStrLn stderr $ "readFile " ++ outpath ++ " raised: " ++ show (exc :: IOException)
-                                              attemptToRead
-                       attemptToRead
---          void $ evaluate $ length output
-          SimpleLog.log logHandle LogSolving "solution output:"
-          SimpleLog.log logHandle LogSolving $ BSC.unpack output
-          -- let sols = splitSolutions output
-              -- l = last sols
-              -- result = if l == "==========\n"
-              --          then SolveComplete
-              --          else SolveIncomplete
-          SimpleLog.log logHandle LogSolving "parsing solver output..."
-          timeAction "solve/parse" $ case Atto.parseOnly (parseSolverOutput <* Atto.endOfInput) output of
-            Right (status, models) -> do
-              SimpleLog.log logHandle LogSolving "parsing done"
-              return (status, models)
-            Left e -> do
-              return (SolveIncomplete, [])
-              --wk <- readIORef wasKilled
-              --if wk then return (SolveIncomplete, [])
-              --      else error $ "error parsing solutions from solver:\n" ++ show e ++ "\n" ++ BSC.unpack output
+          SimpleLog.log logHandle LogDebug "fzn-gecode done/killed"
+          return (p, e)
+        case exitCode2 of
+          Just _ -> return ()
+          Nothing -> liftIO $ do -- terminateProcess ph2
+                                 void $ waitForProcessMsg "waiting for terminated process" ph2
+                                 return ()
+        output <- do let attemptToRead = do
+                           r <- try (BSC.readFile outpath)
+                           case r of
+                             Right x -> return x
+                             Left exc -> do hPutStrLn stderr $ "readFile " ++ outpath ++ " raised: " ++ show (exc :: IOException)
+                                            attemptToRead
+                     attemptToRead
+        errors <- do let attemptToRead = do
+                           r <- try (BSC.readFile errpath)
+                           case r of
+                             Right x -> return x
+                             Left exc -> do hPutStrLn stderr $ "readFile " ++ errpath ++ " raised: " ++ show (exc :: IOException)
+                                            attemptToRead
+                     attemptToRead
+        SimpleLog.log logHandle LogSolving "solving stderr:"
+        SimpleLog.log logHandle LogSolving $ BSC.unpack errors
+        SimpleLog.log logHandle LogSolving "solution output:"
+        SimpleLog.log logHandle LogSolving $ BSC.unpack output
+        SimpleLog.log logHandle LogSolving "parsing solver output..."
+        timeAction "solve/parse" $ case Atto.parseOnly (parseSolverOutput <* Atto.endOfInput) output of
+          Right (status, models) -> do
+            SimpleLog.log logHandle LogSolving "parsing done"
+            return (status, models)
+          Left _ -> do
+            return (SolveIncomplete, [])
 
 splitSolutions :: String -> (SolveResult, [String])
 splitSolutions outputBlob =
@@ -1654,9 +1635,9 @@ stripped = fst . span (/='/') . tail . snd . break (=='/')
 concurrentlyLimited :: Int -> [IO a] -> IO [a]
 concurrentlyLimited n tasks = concurrentlyLimited' n (zip [0..] tasks) [] [] (length tasks)
 
-concurrentlyLimited' _ [] [] results ntasks = do
-    hPrintf stderr "%%%%%%mzn-progress 100.00\n"
-    hFlush stderr
+concurrentlyLimited' _ [] [] results _ntasks = do
+    hPrintf stdout "%%%%%%mzn-progress 100.00\n"
+    hFlush stdout
     return . map snd $ sortBy (comparing fst) results
 concurrentlyLimited' 0 todo ongoing results ntasks = do
     (task, newResult) <- waitAny ongoing
@@ -1665,8 +1646,8 @@ concurrentlyLimited' _ [] ongoing results ntasks = concurrentlyLimited' 0 [] ong
 concurrentlyLimited' n ((i::Int, task):otherTasks) ongoing results ntasks = do
     let ntasks' :: Double = fromIntegral ntasks
     let i' :: Double = fromIntegral i
-    hPrintf stderr "%%%%%%mzn-progress %.2f\n" (100.0 * i' / ntasks')
-    hFlush stderr
+    hPrintf stdout "%%%%%%mzn-progress %.2f\n" (100.0 * i' / ntasks')
+    hFlush stdout
     t <- async $ (i,) <$> task
     concurrentlyLimited' (n-1) otherTasks (t:ongoing) results ntasks
 
@@ -1753,7 +1734,7 @@ findM f (x:xs) = do
 
 waitForProcessMsg :: String -> ProcessHandle -> IO ExitCode
 waitForProcessMsg msg processHandle = do
-  waitForProcess processHandle `catch` handler
-  where handler e = do
+  waitForProcess processHandle `catch` process_handler
+  where process_handler e = do
           hPutStrLn stderr $ "waitForProcessMsg: " ++ msg
           throwM (e :: IOException)

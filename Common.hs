@@ -21,8 +21,8 @@ argumentToExpression a = makeExp $
     case a of
       OrdinaryParameter e -> e
       ErstwhileVariable vid -> Ident $ vid
-      ArgumentArrayAccess a idxs ->
-          ArrayAccess (argumentToExpression a)
+      ArgumentArrayAccess aa idxs ->
+          ArrayAccess (argumentToExpression aa)
                       (map makeExp idxs)
       Blank                 -> error $ "argumentToExpression: Blank"
 
@@ -39,6 +39,7 @@ appearsInConstraint m a =
     let i = case a of
               ErstwhileVariable v -> v
               OrdinaryParameter (Ident v) -> v
+
         cs = [ e | ConstraintI e <- m ^. modelItems ]
         e'sInCs = do c <- cs
                      e' <- universeOf template (c ^. expRawExpression)

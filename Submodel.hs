@@ -37,6 +37,7 @@ submodels maxConstraints m = do
 
 -- Choose a subset from xs, where the chosen subset's size is at most
 -- n.  Returns both the chosen subset and the remainder.
+chooseSubset :: (Monad m, Alternative m) => Int -> [Item] -> m([Item], [Item])
 chooseSubset _ [] = return ([], [])
 chooseSubset 0 xs = return ([], xs)
 chooseSubset n (x:xs) =
@@ -169,7 +170,7 @@ variants sm = do
   -- cannot be unrolled this way, backtrack.
   otherConstraints <- mapM (\ (ConstraintI e) -> matchUnroll unrollset e) constraintItems
   -- Merge the constraint bodies together under a single forall.
-  let generatedIdentifiers = [ "LEADER_" ++ show n | n <- [0..] ]
+  let generatedIdentifiers = [ "LEADER_" ++ show n | n <- [0::Int ..] ]
       generatedVarDecls = [ VarDecl parInt ident Nothing mempty Nothing Nothing | ident <- generatedIdentifiers ]
   -- Don't wrap the first body in a let; instead, lift its wrapper to
   -- the top level.
@@ -276,7 +277,7 @@ testSubmodels :: IO ((), Statistics)
 testSubmodels = do
   Right m <- parseModelFile "tests/test-unroll.mzn"
   runStatistics $ do
-    forM_ (zip [0..] (submodels 2 m)) $ \(n,(sm,_)) -> do
+    forM_ (zip [0::Int ..] (submodels 2 m)) $ \(n,(sm,_)) -> do
       recordLogKey (T.pack (show n)) (fznShow sm)
     writeLog "submodels.json"
 
@@ -286,14 +287,14 @@ testVariants file = do
   let m2 = rewriteModel initialNormalisation m
   runStatistics $ do
     recordLogKey "model" (fznShow m2)
-    forM_ (zip [0..] (submodels 2 m2)) $ \(n,(sm,c)) -> do
+    forM_ (zip [0::Int ..] (submodels 2 m2)) $ \(n,(sm,c)) -> do
       statisticsTime (T.pack ("submodel " ++ show n)) $ do
         recordLogKey "submodel" (fznShow sm)
         recordLogKey "context" (maybe "-" showExp c)
-        forM_ (zip [0..] (variants sm)) $ \ (n2,sm2) -> do
+        forM_ (zip [0::Int ..] (variants sm)) $ \ (n2,sm2) -> do
           statisticsTime (T.pack (show n2)) $ do
             recordLogKey "variant" (plainShow sm2)
-            forM_ (zip [0..] (instantiations sm2)) $ \ (n3,sm3) -> do
+            forM_ (zip [0::Int ..] (instantiations sm2)) $ \ (n3,sm3) -> do
               recordLogKey (T.pack ("instantiation " ++ show n3)) (plainShow sm3)
     writeLog "submodels.json"
 

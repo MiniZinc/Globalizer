@@ -163,7 +163,6 @@ predicate channelACB(array[int,int] of var int : x, array[int,int,int] of var in
   /\ ub_array(b) in {0,1}
   /\ forall (i in index_set_1of3(b), j in index_set_2of3(b), k in index_set_3of3(b))
        (x[i,k] = j <-> (b[i,j,k]=1));
-
 predicate channelABC(array[int,int] of var int : x, array[int,int,int] of var int : b) =
      lb_array(b) in {0,1}
   /\ ub_array(b) in {0,1}
@@ -175,4 +174,3 @@ predicate channelCAB(array[int,int] of var int : x, array[int,int,int] of var in
   /\ ub_array(b) in {0,1}
   /\ forall (i in index_set_1of3(b), j in index_set_2of3(b), k in index_set_3of3(b))
        (x[j,k] = i <-> (b[i,j,k]=1));
-  

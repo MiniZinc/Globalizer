@@ -12,12 +12,12 @@ import Options.Applicative as O
 import SimpleLog
 
 data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
-                       , dataFiles :: [String]
                        , maxConstraints :: Int
                        , nRandomSolutions :: Int
                        , nSampleSolutions :: Int
                        , debugging :: [LogCategory]
-                       , includeDir :: Maybe String
+                       , stdlibDir :: Maybe String
+                       , minizincPath :: Maybe String
                        , constraintFilter :: Maybe String
                        , solvingTimeout :: Integer
                        , selectGroup :: Maybe Int
@@ -37,12 +37,12 @@ withInfo opts desc = info (helper <*> opts) $ progDesc desc
 parseOptions :: O.Parser GlobalizerOptions
 parseOptions = GlobalizerOptions
                  <$> parseArguments
-                 <*> parseDataFiles
                  <*> parseMaxConstraints
                  <*> parseRandomSolutions
                  <*> parseSampleSolutions
                  <*> parseDebugging
-                 <*> parseIncludeDir
+                 <*> parseStdlibDir
+                 <*> parseMinizincPath
                  <*> parseConstraintFilter
                  <*> parseSolvingTimeout
                  <*> parseSelectGroup
@@ -59,7 +59,6 @@ parseSelectGroup = optional $ option auto $
   long "selectGroup"
   <> metavar "<index>"
   <> help "Consider only the selected group"
-
 
 parseMaxConstraints :: O.Parser Int
 parseMaxConstraints = option auto $
@@ -95,14 +94,8 @@ parseSampleSolutions = option auto $
 
 parseArguments :: O.Parser [String]
 parseArguments = some $ O.argument str $
-  help "Input files (.mzn and .dzn, with the .mzn first)"
+  help "Input files (.mzn and .dzn)"
   <> metavar "<input files>"
-
-parseDataFiles :: O.Parser [String]
-parseDataFiles = some $ strOption $
-  short 'd'
-  <> help "Data files (.dzn)"
-  <> metavar "<data files>"
 
 parseDebugging :: O.Parser [LogCategory]
 parseDebugging =
@@ -110,7 +103,11 @@ parseDebugging =
       list = do (category, opt, desc) <- cats
                 return $ O.flag Nothing (Just category) $
                   (long ("debug-"++opt) <> help ("Produce debugging output related to "++desc))
-  in catMaybes <$> sequenceA list
+   in
+   let verb :: O.Parser (Maybe LogCategory)
+       verb = O.flag Nothing (Just LogHigh) $
+                  (short 'v' <> help "Verbose output (same as --debug-high)")
+  in catMaybes <$> (sequenceA  $ (verb: list))
   where
     cats = [ (LogArgs, "args", "argument generation")
            , (LogConstraints, "constraints", "constraint checking")
@@ -136,11 +133,17 @@ parseConstraintFilter = optional $ option str $
   <> metavar "<substring>"
   <> help "Consider only constraints containing these comma seprated substrings"
 
-parseIncludeDir :: O.Parser (Maybe String)
-parseIncludeDir = optional $ option str $
-  short 'I' <> long "search-dir"
+parseStdlibDir :: O.Parser (Maybe String)
+parseStdlibDir = optional $ option str $
+  short 'I' <> long "stdlib-dir" <> long "mzn-stdlib-dir"
   <> metavar "<dir>"
-  <> help "Additionally search for included files in <dir>"
+  <> help "Location of MiniZinc stdlib directory. (This should contain \"globalizer\" directory)"
+
+parseMinizincPath :: O.Parser (Maybe String)
+parseMinizincPath = optional $ option str $
+  long "minizinc-exe" <> long "mzn-exe"
+  <> metavar "<dir>"
+  <> help "Path to minizinc.exe if it is not not the system path."
 
 parseSolvingTimeout :: O.Parser Integer
 parseSolvingTimeout = option auto $

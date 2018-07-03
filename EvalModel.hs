@@ -36,7 +36,7 @@ allConstraintsTrue m =
   let constraints = [ e | ConstraintI e <- m ^. modelItems ]
   in case find ((/= (BoolLit True)) . view expRawExpression) constraints of
        Nothing -> True
-       Just e -> False
+       Just _ -> False
 
 assigns :: Model -> Model
 assigns m = m & modelItems %~ mapMaybe (doAssign m)
@@ -47,8 +47,8 @@ doAssign m (VarDeclI vd) =
               Just _ -> vd
               Nothing -> vd & varDeclExpression .~ lookupAssignI m (vd ^. varDeclIdent)
   in Just $ VarDeclI vd'
-doAssign m (AssignI{}) = Nothing
-doAssign m i = Just i
+doAssign _ (AssignI{}) = Nothing
+doAssign _ i = Just i
 
 lookupAssignI :: Model -> String -> Maybe Expression
 lookupAssignI m varid = listToMaybe (mapMaybe f (m ^. modelItems))
@@ -62,4 +62,4 @@ evalConstraints env m =
 
 evalItem :: Bindings -> Item -> Item
 evalItem bs (ConstraintI e) = ConstraintI (makeExp $ expressionToValue bs (e ^. expRawExpression))
-evalItem bs i = i
+evalItem _ i = i

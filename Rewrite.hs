@@ -139,12 +139,12 @@ processModelAndData :: GOpts.GlobalizerOptions -> Maybe String -> [Item] -> Chan
                            Statistics
                           )
 processModelAndData opts consFilter extraItems channelMap logHandle = do
-  let incDir = GOpts.includeDir opts
+  let incDir = (fromMaybe "./mznlib/globalizer" $ GOpts.stdlibDir opts)
   let maxCons = GOpts.maxConstraints opts
-  let s = head $ inputFiles opts
-  let dataFiles = (tail (GOpts.inputFiles opts)) ++ (GOpts.dataFiles opts)
+  let modelFile = head $ (filter (isSuffixOf ".mzn") (GOpts.inputFiles opts))
+  let dataFiles = (filter (isSuffixOf ".dzn") (GOpts.inputFiles opts))
   ((o,modelMap),stats) <- runStatistics $ do
-    originalModel0 <- liftIO (readModel s)
+    originalModel0 <- liftIO (readModel modelFile)
     let originalModel = originalModel0 & modelItems %~ (++extraItems)
     let normalisedModel = rewriteModel initialNormalisation originalModel
     log logHandle LogNormalisation $ unlines
@@ -159,7 +159,7 @@ processModelAndData opts consFilter extraItems channelMap logHandle = do
                [] -> [Model []]
                _ -> ds'
 
-    let bothglobMznPath = (fromMaybe "./" incDir) ++ "/both-glob.mzn"
+    let bothglobMznPath = incDir ++ "/both-glob.mzn"
 
     globalsModel <- liftIO (stripMetadataModel . (either (const (error "no both-glob.mzn?")) id) <$> parseModelFile bothglobMznPath)
     let env = topLevelBindings (stripMetadataModel globalsModel)
@@ -176,8 +176,7 @@ processModelAndData opts consFilter extraItems channelMap logHandle = do
     let modelSets' = filter (not . S.null . fst . snd) (modelSets)
     let modelMap = M.fromList modelSets'
 
-    let dataFilePath = (fromMaybe "./" incDir)
-    o <- runGroupsModels dataFilePath env modelMap opts consFilter channelMap logHandle
+    o <- runGroupsModels incDir env modelMap opts consFilter channelMap logHandle
     return (o, modelMap)
   return (zip (M.toList modelMap) o,stats)
 

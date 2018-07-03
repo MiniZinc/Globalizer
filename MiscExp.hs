@@ -9,7 +9,7 @@ import Language.MiniZinc
 
 argumentOccurrences' :: Expression -> VarId -> Int -> [VarId]
 argumentOccurrences' e a arg =
-    [ i | aa@(ArrayAccess ae args) <- U.universeBi e :: [Expression'],
+    [ i | (ArrayAccess ae args) <- U.universeBi e :: [Expression'],
           Ident ai <- return (ae ^. expRawExpression),
           ai == a,
           length args >= arg,

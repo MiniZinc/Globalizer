@@ -68,6 +68,9 @@ initialPass opts logHandle = do
     then return ([], [], s)
     else return (IncludeI "glob.mzn" Nothing : extraItems, channelMap, s)
 
+putStrLnOut :: String -> IO()
+putStrLnOut t = hPutStr stdout $ t ++ "\n"
+
 main2 :: GOpts.GlobalizerOptions -> IO ()
 main2 opts = do
   -- Set number of jobs to run in parallel
@@ -102,18 +105,18 @@ main2 opts = do
 
   if (doOutputHTML opts)
   then do
-    putStrLn("%%%mzn-html-start")
-    putStrLn("<h1>Found Globals:</h1><ul>")
-    mapM_ (\(((n,(l,ml))),r,c) -> putStrLn ((
+    putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("<h1>Found Globals:</h1><ul>")
+    mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
       if shadowed ((n,(l,ml)),r,c)
       then "*** "
       else "") ++ (
         if vacuous ((l,ml),r,c)
         then "### "
         else "") ++ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">" ++ prettyPrintify r ++ "</a></li>")) realReplacements
-    putStrLn("</ul>")
-    putStrLn("%%%mzn-html-end")
-  else mapM_ (\(((n,(l,ml))),r,c) -> putStrLn ((
+    putStrLnOut("</ul>")
+    putStrLnOut("%%%mzn-html-end")
+  else mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
     if shadowed ((n,(l,ml)),r,c)
     then "*** "
     else "") ++ (
@@ -122,8 +125,8 @@ main2 opts = do
       else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
 
   let allStats = s Data.Monoid.<> initialPassStats
-  putStrLn $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
-  putStrLn $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
+  putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
+  putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
 
 subgroupOf :: GroupName -> GroupName -> Bool
 subgroupOf (_,(loc1, mctxt1)) (_,(loc2, mctxt2)) =

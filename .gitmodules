@@ -1,0 +1,3 @@
+[submodule "submodules/minizinc-hs"]
+	path = submodules/minizinc-hs
+	url = ssh://git@bitbucket.org/lokdlok/minizinc-hs.git

@@ -1,6 +1,6 @@
 flags: {}
 packages:
 - '.'
-- '../minizinc-hs'
+- 'submodules/minizinc-hs'
 extra-deps: [ global-lock-0.1 ]
 resolver: lts-9.5

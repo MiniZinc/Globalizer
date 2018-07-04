@@ -2,10 +2,10 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                minizinc-globalizer
-version:             0.1.0.0
+version:             0.1.5.0
 synopsis:            Globalizer for MiniZinc
 author:              Chris Mears
-maintainer:          chris@cmears.id.au
+maintainer:          kevin.leo@monash.edu
 category:            Language
 build-type:          Simple
 cabal-version:       >=1.10

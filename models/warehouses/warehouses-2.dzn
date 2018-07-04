@@ -1,0 +1,22 @@
+%-----------------------------------------------------------------------------
+% Instance
+
+n_suppliers = 4;
+n_stores = 8;
+building_cost = 30;
+
+capacity = [1,2,2,3];
+
+cost_matrix =
+ [|20, 24, 11, 25
+  |28, 27, 82, 83
+  |74, 97, 71, 96
+  | 2, 55, 73, 69
+  | 1,  5, 73, 59
+  |10, 73, 13, 43
+  |93, 35, 63, 85
+  |47, 65, 55, 71|]; 
+
+MaxCost  = max(i in 1..n_stores, j in 1..n_suppliers)(cost_matrix[i,j]);
+MaxTotal =   (n_suppliers * building_cost) 
+           + sum(i in 1..n_stores, j in 1..n_suppliers)(cost_matrix[i,j]); 

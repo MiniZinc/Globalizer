@@ -1,0 +1,9 @@
+MiniZinc: type error:   symbol error: variable `n_cars' must be defined (did you forget to specify a data file?)
+.\temp149458909.mzn:2.1-11
+MiniZinc: type error:   symbol error: variable `n_options' must be defined (did you forget to specify a data file?)
+.\temp149458909.mzn:3.1-14
+MiniZinc: type error:   symbol error: variable `n_classes' must be defined (did you forget to specify a data file?)
+.\temp149458909.mzn:4.1-14
+MiniZinc: type error:   symbol error: variable `option_max_per_block' must be defined (did you forget to specify a data file?)
+.\temp149458909.mzn:5.1-51
+MiniZinc: type error:

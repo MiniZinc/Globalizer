@@ -19,5 +19,6 @@ temp*.mzn
 mzn2fzn-output*
 output*
 output
+error*
 .stack-work
 bundles/

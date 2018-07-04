@@ -11,9 +11,10 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable minizinc-globalizer
-  main-is:             Main.hs
-  ghc-options:         -O2 -threaded -Wall
-  other-extensions:    BangPatterns, DoAndIfThenElse, TemplateHaskell, OverloadedStrings, DeriveDataTypeable, DeriveFunctor, ScopedTypeVariables, GeneralizedNewtypeDeriving, DeriveGeneric, NoMonomorphismRestriction
+  hs-source-dirs:    src
+  main-is:           Main.hs
+  ghc-options:       -O2 -threaded -Wall
+  other-extensions:  BangPatterns, DoAndIfThenElse, TemplateHaskell, OverloadedStrings, DeriveDataTypeable, DeriveFunctor, ScopedTypeVariables, GeneralizedNewtypeDeriving, DeriveGeneric, NoMonomorphismRestriction
   other-modules:
                      Arguments
                      Bindings

@@ -14,6 +14,6 @@ crew=[2,3, 6,2,2,4,2,4,5,4];
 spareCapacity=[4,6,10,10,8];
 
 
-nhosts = 5;
-nguests = 10;
-periods = 4;
+nh = 5;
+ng = 10;
+p = 4;

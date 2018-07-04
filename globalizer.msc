@@ -1,0 +1,12 @@
+{
+    "executable": "minizinc-globalizer",
+    "id": "globalizer",
+    "isGUIApplication": false,
+    "mznlib": "-I mznlib/globalizer",
+    "name": "Globalizer",
+    "supportsMzn": true,
+    "version": "1.0",
+    "needsStdlibDir": false,
+    "needsMznExecutable": true,
+    "stdFlags": ["--output-html"]
+}

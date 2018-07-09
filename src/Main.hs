@@ -101,7 +101,7 @@ main2 opts = do
   let vacuous (_,r,c) = name (fst r) == toplevelCall c
 
   let realReplacements = filter (\x -> not (vacuous x) && not (shadowed x)) nameReps
-  let modelFile = head (inputFiles opts)
+  let modelFile = head $ (filter (isSuffixOf ".mzn") (GOpts.inputFiles opts))
 
   if (doOutputHTML opts)
   then do

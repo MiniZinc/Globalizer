@@ -6,7 +6,7 @@ variables:
   before_script:
     - mkdir -p globalizer/share/globalizer
   script:
-    - stack --local-bin-path globalizer/bin build --copy-bins
+    - stack --stack-root ${CI_PROJECT_DIR}/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
     - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
     - cp globalizer.msc globalizer/share/globalizer/
   artifacts:
@@ -16,6 +16,7 @@ variables:
     key: "${MZNARCH}_${CI_COMMIT_REF_SLUG}"
     paths:
       - build/
+      - stack/
 
 build:linux:
   <<: *build_definition
@@ -42,6 +43,10 @@ build:win32:
   before_script:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat"
     - mkdir globalizer\share\globalizer
+  script:
+    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
+    - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
+    - cp globalizer.msc globalizer/share/globalizer/
   tags:
     - win32
     - haskell
@@ -54,6 +59,10 @@ build:win64:
   before_script:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat" amd64
     - mkdir globalizer\share\globalizer
+  script:
+    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
+    - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
+    - cp globalizer.msc globalizer/share/globalizer/
   tags:
     - win64
     - haskell

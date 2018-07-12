@@ -1,11 +1,14 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
 .build_template: &build_definition
   stage: build
   before_script:
-    - mkdir -p {build,globalizer}
+    - mkdir -p globalizer/share/globalizer
   script:
-    - cd build
-    - make
-    - cp -r * globalizer
+    - stack --local-bin-path globalizer/bin build --copy-bins
+    - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
+    - cp globalizer.msc globalizer/share/globalizer/
   artifacts:
     paths:
       - globalizer
@@ -38,8 +41,7 @@ build:win32:
     MZNARCH: "win32"
   before_script:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat"
-    - if not exist "build" mkdir build
-    - if not exist "globalizer" mkdir globalizer
+    - mkdir globalizer\share\globalizer
   tags:
     - win32
     - haskell
@@ -51,8 +53,7 @@ build:win64:
     MZNARCH: "win64"
   before_script:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat" amd64
-    - if not exist "build" mkdir build
-    - if not exist "globalizer" mkdir globalizer
+    - mkdir globalizer\share\globalizer
   tags:
     - win64
     - haskell

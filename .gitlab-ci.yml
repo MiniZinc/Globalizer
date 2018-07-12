@@ -1,0 +1,59 @@
+.build_template: &build_definition
+  stage: build
+  before_script:
+    - mkdir -p {build,globalizer}
+  script:
+    - cd build
+    - make
+    - cp -r * globalizer
+  artifacts:
+    paths:
+      - globalizer
+  cache:
+    key: "${MZNARCH}_${CI_COMMIT_REF_SLUG}"
+    paths:
+      - build/
+
+build:linux:
+  <<: *build_definition
+  image: haskell:8
+  variables:
+    MZNARCH: "linux"
+  tags:
+    - linux
+    - docker
+
+build:osx:
+  <<: *build_definition
+  variables:
+    MZNARCH: "osx"
+  tags:
+    - osx
+    - haskell
+    - stack
+
+build:win32:
+  <<: *build_definition
+  variables:
+    MZNARCH: "win32"
+  before_script:
+    - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat"
+    - if not exist "build" mkdir build
+    - if not exist "globalizer" mkdir globalizer
+  tags:
+    - win32
+    - haskell
+    - stack
+
+build:win64:
+  <<: *build_definition
+  variables:
+    MZNARCH: "win64"
+  before_script:
+    - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat" amd64
+    - if not exist "build" mkdir build
+    - if not exist "globalizer" mkdir globalizer
+  tags:
+    - win64
+    - haskell
+    - stack

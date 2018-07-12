@@ -19,7 +19,7 @@ variables:
 
 build:linux:
   <<: *build_definition
-  image: haskell:8
+  image: haskell:8.2
   variables:
     MZNARCH: "linux"
   tags:

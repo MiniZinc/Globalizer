@@ -3,4 +3,4 @@ packages:
 - '.'
 - 'submodules/minizinc-hs'
 extra-deps: [ global-lock-0.1 ]
-resolver: lts-9.5
+resolver: lts-10.0

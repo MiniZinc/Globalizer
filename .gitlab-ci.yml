@@ -36,7 +36,7 @@ build:osx:
     - haskell
     - stack
 
-build:win32:
+.build:win32: #TODO: How do you build a win32 haskell binary?
   <<: *build_definition
   variables:
     MZNARCH: "win32"

@@ -65,51 +65,6 @@ data AbortException = AbortException
   deriving (Show, Typeable)
 instance Exception AbortException
 
--- -- Should we print debugging information to standard error?
--- shouldLog :: LogCategory -> Bool
--- --shouldLog = (`elem` [LogVariables])
--- shouldLog = (`elem` logList)
--- --              LogSolving
--- --             ])
--- logList =u
---     -- LogChecking :
---     -- -- LogHigh :
---     -- -- LogScoring :
---     LogArgs :
---     -- LogSolving :
---     LogDebug :
---     -- -- LogVariables :
---     []
--- --shouldLog = const False
-
--- data LogCategory = LogDebug
---                  | LogVariables
---                  | LogArgs
---                  | LogSolving
---                  | LogChecking
---                  | LogHigh
---                  | LogScoring
---   deriving (Eq)
-
--- logCat :: (MonadIO m) => LogCategory -> String -> m ()
--- logCat cat msg = when (shouldLog cat) $ liftIO $ hPutStr stderr msg >> hFlush stderr
--- logLnCat :: (MonadIO m) => LogCategory -> String -> m ()
--- logLnCat cat msg = when (shouldLog cat) $ liftIO $ hPutStrLn stderr msg >> hFlush stderr
--- recordCat :: LogCategory -> String -> StatisticsIO ()
--- recordCat cat msg = when (True && (True || shouldLog cat)) $ do
---                       key <- use currentKey
--- --                      logTree %= (at key %~ (Just . T.append (T.pack msg) . fromMaybe ""))
---                       logTree %= (at key %~ (Just . (\existing -> T.concat [existing, T.pack "\n", T.pack msg]) . fromMaybe (T.pack "")))
-
--- record key val = recordLogKey key val
-
--- logPrintCat :: (MonadIO m, Show a) => LogCategory -> a -> m ()
--- logPrintCat cat x = when (shouldLog cat) $ liftIO $ hPrint stderr x >> hFlush stderr
--- logFlush = liftIO $ hFlush stderr
-
--- logLn = logLnCat LogDebug
--- logPrint = logPrintCat LogDebug
-
 -- Find the variables in an expression.  Does NOT descend into the
 -- indices of array accesses.
 --
@@ -315,7 +270,7 @@ scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
   let nSampleSols = GOpts.nSampleSolutions opts
   let newModel = Model {
                _modelItems =
-                 map VarDeclI (topLevelVarDecls m) -- ++ usedVarDecls ++ usedParDecls)
+                 map VarDeclI (topLevelVarDecls m)
                  ++ annotationItems m
                  ++ filter isFunctionI (m ^. modelItems)
                  ++ instantiate c
@@ -328,37 +283,26 @@ scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
   let evalledNewModel = Language.MiniZinc.evalModelArraySlices newModel
 
   recordLogKey "new model" (plainShow evalledNewModel)
-  --      when (name (fst c) == "bin_packing_capa") $ SimpleLog.log $ "SOLVING FOR CONSTRAINT: " ++ prettyPrintify c
   when (True || name (fst c) == "sliding_sum") $ SimpleLog.log logHandle LogScoring $ "SOLVING FOR CONSTRAINT: " ++ prettyPrintify c
-  -- when (True || name (fst c) == "sliding_sum") $ SimpleLog.log logHandle LogScoring $ (plainShow evalledNewModel)
   (_, csols) <-
     timeAction "scoreReplacement/solve" $
       solve dataFilePath True evalledNewModel opts logHandle
-  --      statisticsFlatZincCall
-  -- liftIO $ atomically $ do x <- takeTMVar zincCalls
-  --                          putTMVar zincCalls (x+1)
   when (length csols < nSampleSols) $ do
-  --        SimpleLog.log =<< liftIO (lock (prettyPrintModel newModel))
     SimpleLog.log logHandle LogScoring $ "didn't find enough solutions to constraint (" ++ prettyPrintify c ++ ")"
     SimpleLog.log logHandle LogScoring $ "found only " ++ show (length csols) ++ " solutions using this model:"
     SimpleLog.log logHandle LogScoring $ plainShow evalledNewModel
 
-    -- liftIO $ hPutStrLn stderr $ "didn't find solutions to constraint (" ++ prettyPrintify c ++ ")"
-  --      when (True || name (fst c) == "sliding_sum") $ mapM_ (SimpleLog.logPrintCat LogScoring) csols
   results <- 
    timeAction "solveReplacement/checkSols" $
    statisticsTime "forM csols" $ forM (zip [0::Int ..] csols) $ \(solnum, s) -> statisticsTime (T.pack ("solution " ++ show solnum)) $ do
     SimpleLog.log logHandle LogScoring $ plainShow s
-    let m' = Model { _modelItems = map VarDeclI (topLevelVarDecls m) -- ++ usedVarDecls ++ usedParDecls)
+    let m' = Model { _modelItems = map VarDeclI (topLevelVarDecls m)
                                    ++ functionItems m
                                    ++ annotationItems m
                                    ++ solutionToAssignments (s)
                                    ++ [ i | i@(ConstraintI _) <- m ^. modelItems ]
                                    ++ maybe [] ((:[]) . ConstraintI) maybeContext
                    }
-  --        when (True || name (fst c) == "sliding_sum") $ SimpleLog.logCat LogScoring . plainShow $ m'
-    -- SimpleLog.log logHandle LogDebug $ "Checking satisfiability... "
-    -- recordLogKey "solution" (show s)
 
     SimpleLog.log logHandle LogScoring $ "model to be tested for satisfiability:"
     SimpleLog.log logHandle LogScoring $ plainShow m'
@@ -367,7 +311,6 @@ scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
       timeAction "solveReplacement/checkSols/modelIsSatisfiable" $
       liftIO $ try (return $! modelIsSatisfiable env m')
     statisticsEvaluation
-    -- SimpleLog.logCat LogDebug "done"
     SimpleLog.log logHandle LogScoring $ "satisfies: " ++ (show res)
     let succ' = case res of
                   Left (AssertFailed _) -> False
@@ -375,17 +318,11 @@ scoreReplacement dataFilePath env maybeContext m outVars c opts logHandle = do
                   Left (EvalUndefined _) -> False
                   Left (UnfixedVariable _) -> False
                   Left (IndexOutOfRange _) -> False
-  --                          error $ "uh oh: " ++ show (IndexOutOfRange msg)
                   Right b -> b
     return succ'
   let goods = length (filter id results)
-  -- liftIO $ atomically $ do x <- takeTMVar evalCalls
-  --                          putTMVar evalCalls (x+1)
   statisticsEvaluationAdd (length csols)
   void $ liftIO $ evaluate goods
-  --      when (True || name (fst c) == "sliding_sum") $ SimpleLog.logCat LogScoring $ printf "evaluation %d for %s under context %s" goods (show c) (show maybeContext)
-  --      when (name (fst c) == "bin_packing_capa") $ recordCat LogScoring $ printf "evaluation %d" goods
-  -- liftIO $ printf "num of goods: %d\n" goods
   SimpleLog.log logHandle LogScoring $ "goods: " ++ prettyPrintify c ++ ": " ++ show goods
   return $! (c, fromIntegral goods / fromIntegral nSampleSols :: Double)
 
@@ -402,11 +339,10 @@ getGoodConstraints dataFilePath env maybeContext m inter opts logHandle = do
   let testConstraint c = do
         let outVars = getVariablesInConstraints m
         scoresAndContexts <- do
---      SimpleLog.logN logHandle LogHigh "s"
           result <- timeScoreReplacement dataFilePath env maybeContext m outVars c opts logHandle
           SimpleLog.logN logHandle LogHigh $ "."
           return result
-        return $! scoresAndContexts -- (maximumBy compareReplacementAndContext scoresAndContexts)
+        return $! scoresAndContexts
 
   let isTrue (c,_) = name c == "true"
   exitEarly <- (const False) <$>
@@ -452,15 +388,6 @@ compareReplacementAndContext (_r1,score1) (_r2,score2) =
       GT -> GT
       EQ -> EQ
 
--- compareReplacementAndContext :: (Replacement,Context,Double)
---                              -> (Replacement,Context,Double)
---                              -> Ordering
--- compareReplacementAndContext (_r1,ctx1,score1) (_r2,ctx2,score2) =
---     case compare score1 score2 of
---       LT -> LT
---       GT -> GT
---       EQ -> comparing (negate . length) ctx1 ctx2
-
 prettyPrintify :: Replacement -> String
 prettyPrintify (Constraint { name=n }, args) =
   constraintName n ++ "(" ++ intercalate "," (map f args) ++ ")"
@@ -491,9 +418,6 @@ tighter1 _env (c1,args1) (c2,args2) =
         f _ _ = error "tighter1"
 
 tighter2 :: Bindings -> Replacement -> Replacement -> Bool
--- tighter2 env (Constraint {name="sliding_sum"},[OrdinaryParameter l1,OrdinaryParameter u1,OrdinaryParameter s1,x1]) (Constraint {name="sliding_sum"},[OrdinaryParameter l2,OrdinaryParameter u2,OrdinaryParameter s2,x2]) =
---     ( eqInt env l1 l2 && leInt env u1 u2 )
---     || ( eqInt env u1 u2 && grInt env l1 l2 )
 tighter2 _env (Constraint {name="count"},[x1,v1,c1]) (Constraint {name="exactly"},[c2,x2,v2]) =
     x1 == x2 && v1 == v2 && c1 == c2
 tighter2 _ _ _ = False
@@ -538,7 +462,6 @@ instantiate (c,[x]) | name c == "lex2_checking" =
   [ ConstraintI (makeExp $ Call "lex2" (map instantiate' [x])) ]
 instantiate (c,a) = [ ConstraintI (makeExp $ Call (constraintName (name c)) (map instantiate' a)) ]
   
---instantiate' (FixedExpression e) = e
 instantiate' :: Argument -> Expression
 instantiate' (OrdinaryParameter e) = makeExp e
 instantiate' (ErstwhileVariable vid) = makeExp $ Ident vid
@@ -604,7 +527,6 @@ extra "lineareq" [xs,ys,_n] =
 extra "nvalue" [n,xs] = 
     [ ConstraintI (makeExp $ BinOp n BinOpLe (makeExp $ Call "length" [xs])) ]
 extra "sliding_sum" [l,u,n,xs] =
--- <<<<<<< HEAD
     [ ConstraintI (makeExp $ BinOp l BinOpLe u)
     , ConstraintI (makeExp $ BinOp n BinOpLe (makeExp $ Call "length" [xs]))
     , ConstraintI (makeExp $ BinOp n BinOpGr (makeExp $ IntLit 1))
@@ -613,14 +535,6 @@ extra "sliding_sum" [l,u,n,xs] =
     --                      BinOpOr
     --                      (makeExp $ BinOp l BinOpGr (makeExp $ BinOp n BinOpMult (makeExp $ Call "lb_array" [xs]))))
     ]
--- =======
---     [ ConstraintI (BinOp l BinOpLe u)
---     , ConstraintI (BinOp n BinOpLe (Call "length" [xs]))
---     , ConstraintI (BinOp n BinOpGr (IntLit 1))
---     -- , ConstraintI (BinOp (BinOp u BinOpLe (BinOp n BinOpMult (Call "ub_array" [xs])))
---     --                      BinOpOr
---     --                      (BinOp l BinOpGr (BinOp n BinOpMult (Call "lb_array" [xs]))))
--- >>>>>>> master
 extra "value_precede_checking" [s,t,x] =
     [ ConstraintI (makeExp $ Call "member" [x,s])
     , ConstraintI (makeExp $ Call "member" [x,t]) ]
@@ -809,43 +723,6 @@ cartesianProduct1 = cartesianProduct' [] . reverse
         cartesianProduct' acc (xs:xss) =
             concatMap (\x -> cartesianProduct' (x:acc) xss) xs
 
--- -- "usedVarDecl" takes a group of variables (which have the same
--- -- identifier "X") and produces the "X_used" declaration.
--- usedVarDecl :: Model -> [Expression'] -> Maybe (VarDecl ())
--- usedVarDecl m [v] =
---   let vid = groupIdentifier [v]
---       vd = fromMaybe (error "no vardecl") (findVarDecl m vid)
---       (TypeInst ti bt _rs st d) = vd ^. varDeclTypeInst
---   in do guard (st == Plain)
---         return $
---           VarDecl { _varDeclIdent = vid ++ "_used"
---                   , _varDeclAnnotations = mempty
---                   , _varDeclDecoration = mempty
---                   , _varDeclTypeInst = TypeInst ti bt (OrdinaryRanges []) st d
---                   , _varDeclExpression = Just . makeExp $ v }
--- usedVarDecl m g =
---     let vid = groupIdentifier g
---         vd = fromMaybe (error "no vardecl") (findVarDecl m vid)
---         (TypeInst ti bt _rs st d) = vd ^. varDeclTypeInst
---     in do guard (st == Plain)
---           return $
---             VarDecl { _varDeclIdent = vid ++ "_used"
---                     , _varDeclDecoration = mempty
---                     , _varDeclAnnotations = mempty
---                     , _varDeclTypeInst =
---                         TypeInst { tiInst = ti
---                                  , tiBase = bt
---                                  , tiSet = st
---                                  , tiDomain = d
---                                  , tiRanges = OrdinaryRanges
---                                    [parInt { tiDomain =
---                                                (Just (makeExp $ BinOp (makeExp $ IntLit 1)
---                                                             BinOpDotdot
---                                                             (makeExp $ IntLit (genericLength g)))) }] }
-                                               
---                     , _varDeclExpression = Just (makeExp $ ArrayLit (map makeExp g) [(1,genericLength g)]) }
-
-
 -- Does the model have exactly two constraints, and does one
 -- constraint seem to imply the other?
 impliesCheck :: String -> Bindings -> Model -> GOpts.GlobalizerOptions -> SimpleLog.Handle -> StatisticsIO Bool
@@ -915,34 +792,8 @@ freeIdentifiersInConstraints m =
 modelConstraints :: Model -> [Expression]
 modelConstraints (Model items) = [ c | ConstraintI c <- items ]
 
--- freeIdentifiers :: forall a. (Typeable a, Data a) => Expression -> [VarId]
--- freeIdentifiers expr = execWriter $ descendBiM (f emptyBindings) expr
---   where
---     handleComprehension env (Comprehension body gens whereExp _compType) = do
---        newgens <- descendBiM (f env) gens
---        let newenv = flip addVarDeclsToBindings env $
---                     [ uninitialise vd | (Generator {_genVarDecls=vds}) <- newgens, vd <- vds ]
---        void $ f newenv body
--- --                                  descendBiM (f newenv) gens
---        void $ descendBiM (f newenv) whereExp
---        return $ expr
---     f :: Bindings -> Expression -> Writer [VarId] (Expression)
---     f env e =
---         case _expRawExpression e of
---           (Let vds body) -> f (addVarDeclsToBindings (map id vds) env) body
---           (GenCall _p c) -> handleComprehension env c
---           (ComprehensionExpr c) -> handleComprehension env c
---           (Ident y)      -> do
---             case lookupTypeInst y env of
---               Nothing -> tell [y]
---               Just _ -> return ()
---             return $ e
---           y              -> descendBiM (f env) y >> return e
-
 -- Delete a VarDecl's initialisation expression
 uninitialise :: VarDecl -> VarDecl
--- uninitialise (VarDecl {_varDeclTypeInst=ti
---                       ,_varDeclIdent=ident}) = VarDecl ti ident Nothing mempty mempty
 uninitialise = varDeclExpression .~ Nothing
 
 data FailedProcessReason =
@@ -972,7 +823,6 @@ processModelWrapper dataFilePath env maybeContext m maybeReps opts consFilter ch
       outerHandler action = catch action $ \err -> do
                               _ <- liftIO $ hPutStrLn stderr $ "processModelWrapper caught: " ++ show (err::SomeException)
                                              ++ "\nin this model:\n" ++ plainShow m
-                              --_ <- liftIO $ exitFailure
                               return []
   outerHandler $ innerHandler $ processModel dataFilePath env maybeContext m maybeReps opts consFilter channelMap logHandle
 
@@ -1028,7 +878,6 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
     (result, solutions') <-
       timeAction "processModel/solve" $
       solve dataFilePath True modelToSolve opts logHandle
-    -- mapM_ (SimpleLog.logPrintCat LogSolving) solutions'
     SimpleLog.log logHandle LogSolving "done solving model, counting solutions..."
     void $ liftIO $ evaluate $ length solutions'
     SimpleLog.log logHandle LogSolving $ "there are " ++ show (length solutions') ++ " solutions (" ++ show result ++ ")"
@@ -1158,8 +1007,6 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
 
   SimpleLog.log logHandle LogDebug "parVarDecls"
   mapM_ (SimpleLog.logPrint logHandle LogDebug) parVarDecls
-  --  SimpleLog.log "usedVarDecls"
-  --  mapM_ (SimpleLog.log . showVarDecl) usedVarDecls
   SimpleLog.log logHandle LogArgs "model:"
   SimpleLog.log logHandle LogArgs (plainShow m)
   SimpleLog.log logHandle LogArgs "context:"
@@ -1168,17 +1015,9 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
   let showArg Blank = "<blank>"
       showArg a = show (getArgType a) ++ ": " ++ show a
   mapM_ (SimpleLog.log logHandle LogArgs . showArg) potentialArguments
-  --   SimpleLog.log logHandle LogArgs "potentialArguments1Filtered"
-  --   let showArg Blank = "<blank>"
-  --       showArg a = show (getArgType a) ++ ": " ++ show a
-  -- --  mapM_ (SimpleLog.log logHandle LogArgs . showArg) potentialArguments1Filtered
   SimpleLog.log logHandle LogArgs "(end of potential args)"
 
   let argumentsByType = M.fromListWith (++) [ (t,[a]) | a <- potentialArguments, let mt = getArgType a, isJust mt, let Just t = mt ]
-  -- SimpleLog.logPrintCat LogArgs argumentsByType
-  -- SimpleLog.log "potential arguments" $ intercalate "\n" (map showArg potentialArguments)
-  -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1)
-  -- recordCat LogArgs $ intercalate " " (map showArg potentialArguments1Filtered)
 
   let acceptableConstraint (Constraint name' _) =
           and [ name' /= "atmost"
@@ -1196,9 +1035,7 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
                                                      TooBig -> -- liftIO (hPutStrLn stderr ("(too big - " ++ show (name c) ++ ")")) >>
                                                                  return []
                                                      otherReason -> throwingM failedProcessReason otherReason) $ do
-    --    liftIO $ hPutStrLn stderr $ "calculating cartesian product for " ++ show c
     SimpleLog.log logHandle LogConstraints $ "considering constraint " ++ name c
-    --    let cart = (cartesianProduct1 (replicate (length (argtypes c)) potentialArguments))
     let chooseArgument t = Blank : M.findWithDefault [] t argumentsByType
     let cart = mapM chooseArgument (argtypes c)
         numArgLists = length cart
@@ -1208,29 +1045,19 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
     when (numArgLists > maxArgs) $ do
       throwingM failedProcessReason TooBig
 
-    --    liftIO $ hPutStrLn stderr $ "done (" ++ show (length cart) ++ ")"
     let rawargslist = cart
     evalCalls <- liftIO $ newTMVarIO (0::Int)
     replacements' <- statisticsTime "argumentlists" $ forM rawargslist $ \rawargs' -> statisticsTime (T.pack (show rawargs')) $ do
-      -- when (True || name c == "maximum_int_checking") $
 
-      -- SimpleLog.log logHandle LogArgs $ "considering " ++ show rawargs'
       let rawargs = rawargs'
-      -- SimpleLog.log logHandle LogArgs $ "filling in blanks... " ++ show rawargs'
       eitherArgs <- liftIO $ try $ return $! fillInBlanks c templateEnv solutionAssignments rawargs
       let args = case eitherArgs of
                    Left (IndexOutOfRange _) -> rawargs
                    Left _ -> rawargs
                    Right r -> r
-      -- SimpleLog.log logHandle LogArgs $ "blanks filled: " ++ show rawargs'
-          --args = rawargs
-      -- when (name c == "maximum_int_checking") $
-      --   liftIO $ hPutStrLn stderr $ "considering " ++ show args
       let typecheckResult = typecheck c args
       let checkResult = {-# SCC "insideCheckResult" #-} check templateEnv (length solutions) (name c) args
-      -- when (True || name c == "maximum_int_checking") $
       recordLogKey "check result" (show (checkResult))
-      -- SimpleLog.log logHandle LogArgs $ "checkResult: " ++ show checkResult
       SimpleLog.log logHandle LogChecking $ "PRELIMINARY CHECKING: " ++ show (c,args)
       let isInMaybeReps = maybe True (\reps -> (c,args) `elem` map (view _1) reps) maybeReps
       when (not isInMaybeReps) (SimpleLog.log logHandle LogChecking $ "Failure due to isInMaybeReps: " ++ show (c,args) ++ "\nlist: " ++ show maybeReps)
@@ -1248,14 +1075,10 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
       if isInMaybeReps &&
           noBlanks args && checkResult && (name c == "true" || argcheckResult) && typecheckResult
         then do
-          -- when (name c == "maximum_int_checking") $
-          --   liftIO $ hPutStrLn stderr $ "CONSIDERING " ++ show rawargs'
           let extraCon = concat [ (extra (name c)) args'
-                                 | -- i <- [1..length solutions],
-                                   let args' = map argumentToExpression args ]
+                                 | let args' = map argumentToExpression args ]
               coreCon = concat [ (core c) args'
-                                 | -- i <- [1..length solutions],
-                                   let args' = map argumentToExpression args ]
+                                 | let args' = map argumentToExpression args ]
           let items = extraCon ++ coreCon
           let modelToCheck = constraintTemplateModel'' & modelItems <>~ items
           recordLogKey "model to check" (plainShow modelToCheck)
@@ -1288,8 +1111,6 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
                            -- We succeed if there is no such violating assignment.
                            Right mb -> isNothing mb
           when (True || name c == "bin_packing_capa") $ SimpleLog.log logHandle LogChecking $ show success2 ++ "\t      " ++ prettyPrintify (c,args)
---          when (name c == "sliding_sum") $ SimpleLog.logPrintCat LogChecking unsatConstraint
---          liftLog $ logRecordReplacement (c,args) modelToCheck success2 unsatConstraint -- somehow record the failed constraint
           return $ if success2 then Just (c, args) else Nothing
         else return Nothing
     liftIO (atomically (takeTMVar evalCalls)) >>= statisticsEvaluationAdd
@@ -1309,12 +1130,6 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
     -- set.
     Nothing -> return $ map (\r -> (r, 1.0)) strongestOnly
     Just reps -> return reps
-  
-  -- SimpleLog.log logHandle LogHigh $ "End of processModel; here are the surviving constraints:"
-  -- mapM_ (SimpleLog.logPrint logHandle LogHigh) goodOnes
-  -- SimpleLog.log logHandle LogHigh "(done)"
-
---  return (goodOnes :: [(Replacement,Double)])
 
 
 bindSolution :: [Item] -> Bindings -> Bindings
@@ -1334,21 +1149,6 @@ fillInBlanks (Constraint {name="maximum_int_checking"}) bs sols [ Blank, arg1 ] 
     in case getUnique suggestions of
          Nothing -> [ Blank, arg1 ]
          Just m -> [ OrdinaryParameter (IntLit m), arg1 ]
--- --fillInBlanks (Constraint {name="sum_constraint"}) bs nsols [ Blank, arg1 ] | trace ("fillInBlanks " ++ show (Blank,arg1)) False = undefined
--- fillInBlanks (Constraint {name="sum_constraint"}) bs nsols [ Blank, arg1 ] =
---     let sumOfArrayLit (ArrayLit es _dims) = sum <$> mapM getInt es
---         sumOfArrayLit _e                  = Nothing
---         getSum :: ValueFromSolution -> Maybe Int
---         getSum (SingleValue e) = sumOfArrayLit e
---         getSum (ManyValues es) = do sums <- mapM sumOfArrayLit es
---                                     case nub sums of
---                                       [x] -> Just x
---                                       _ -> Nothing
---         value :: Maybe Int
---         value = getSum =<< getArgumentValues bs nsols arg1
---     in case value of
---          Nothing -> [Blank, arg1]
---          Just x  -> [OrdinaryParameter (IntLit x), arg1]
 fillInBlanks (Constraint {name="gcc"}) bs solutionAssignments [ xs, Blank ] | xs /= Blank =
     let gccOfArrayLit (ArrayLit es _dims) =
           let ints = map (fromJust . getInteger) es
@@ -1371,17 +1171,6 @@ fillInBlanks (Constraint {name="gcc"}) bs solutionAssignments [ xs, Blank ] | xs
          Nothing -> [xs, Blank]
          Just x  -> [xs, OrdinaryParameter x]
 
-    --     getGcc :: ValueFromSolution -> Maybe (Expression)
-    --     getGcc (SingleValue e) = makeExp <$> gccOfArrayLit e
-    --     getGcc (ManyValues es) = do gccs <- mapM gccOfArrayLit es
-    --                                 case nub gccs of
-    --                                   [x] -> Just (makeExp x)
-    --                                   _ -> Nothing
-    --     -- value :: Maybe (Expression)
-    --     -- value = getGcc =<< map getArgumentValues bs nsols xs
-    -- in undefined -- case value of
-    --    --   Nothing -> [xs, Blank]
-    --    --   Just x  -> [xs, OrdinaryParameter (x ^. expRawExpression)]
 fillInBlanks _c _bs _sols args = args
 
 -- If the list has only one unique value (all the elements are the
@@ -1393,17 +1182,6 @@ getUnique _ = Nothing
 data ValueFromSolution = SingleValue (Expression')
                        | ManyValues [(Expression')]
   deriving (Show)
-
--- getArgumentValues :: Bindings -> Int -> Argument -> Maybe ValueFromSolution
--- getArgumentValues env nsols arg | trace ("getArgumentValues: " ++ show arg) False = undefined
--- getArgumentValues env nsols arg =
---     case arg of
---       OrdinaryParameter e ->
---           Just $ SingleValue (expressionToValue env e)
---       ErstwhileVariable _vid ->
---           Just $ ManyValues [ expressionToValue env (argumentToExpression i arg ^. expRawExpression) | i <- [1..nsols] ]
---       _a ->
---           Nothing
 
 -- "expandSolutionIdentifier vids nsols item" takes the list of
 -- variable identifiers that appear in the solutions, and converts a
@@ -1565,25 +1343,6 @@ runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle =
                         statisticsTime (T.pack ("group " ++ show groupNumber)) $ do
                           processGroupModels dataFilePath env context (S.toList files) opts consFilter channelMap logHandle
 
-        -- Look for channel constraints.
-        -- forM_ out $ \((c, args),_) -> do
-        --   when (name c == "channel") $ do
-        --     let [i,bs] = args
-        --     -- Get the identifiers of the arguments.
-        --     let getName (ArgumentArrayAccess a args) = getName a
-        --         getName (ErstwhileVariable vid) = vid
-        --         getName x = "?"
-        --     let iname = getName i
-        --     let bsname = getName bs
-        --     -- Find where the underscore is in the booleans part.  If
-        --     -- it's not an array access, it's equivalent to being the
-        --     -- first argument.
-        --     let underscoreArg = case bs of
-        --                           ErstwhileVariable vid -> 1
-        --                           ArgumentArrayAccess a args -> fromMaybe (error ("couldn't find the underscore index in " ++ show args))
-        --                                                         $ (+1) <$> elemIndex (Ident "_") args
-        --     printf "CHANNEL: %s %s %d\n" iname bsname underscoreArg
-
         let isTrue ((c,_),_) = name c == "true"
         let out2 = case find isTrue out of
                      Nothing -> out
@@ -1625,10 +1384,6 @@ runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle =
 stripped :: String -> String
 stripped = fst . span (/='/') . tail . snd . break (=='/')
 
--- deriveNFData ''Argument
--- deriveNFData ''ArgBaseType
--- deriveNFData ''ArgType
--- deriveNFData ''Constraint
 
 
 {- From: http://stackoverflow.com/a/22674732 -}

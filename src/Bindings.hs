@@ -20,7 +20,6 @@ is1DArray env (ArgumentArrayAccess a args) =
 is1DArray env x = 
   maybe False typeInstIs1DArray
           (getIdentifier x >>= \i -> lookupTypeInst i env)
---        (getSolutionIdentifier x 1 >>= \i -> lookupTypeInst i env)
 
 is2DArray :: Bindings -> Argument -> Bool
 is2DArray _ (ArgumentArrayAccess _ _) = False

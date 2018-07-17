@@ -118,15 +118,6 @@ parseDebugging =
            , (LogModel, "model", "group models")
            , (LogHigh, "high", "high-level progress") ]
 
--- parseDebugging = O.switch $
---   long "debug"
---   <> help "Produce debugging output"
-
--- parseDebuggingArgs :: O.Parser Bool
--- parseDebuggingArgs = O.switch $
---   long "debug-args"
---   <> help "Produce debugging output related to argument generation"
-
 parseConstraintFilter :: O.Parser (Maybe String)
 parseConstraintFilter = optional $ option str $
   short 'f' <> long "constraintFilter"

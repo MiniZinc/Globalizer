@@ -15,7 +15,7 @@ goto end
 
 :all
 echo Building and copying:
-stack --local-bin-path "%prefix%" build --copy-bins
+stack --color=never --local-bin-path "%prefix%" build --copy-bins
 if %ERRORLEVEL% GEQ 1 goto error
 goto end
 

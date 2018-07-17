@@ -3,7 +3,7 @@ prefix=.
 exe=${prefix}/minizinc-globalizer
 
 all: src/*.hs minizinc-globalizer.cabal stack.yaml
-	stack build --copy-bins
+	stack --local-bin-path "${prefix}" build --copy-bins
 
 clean:
 	rm -v ${exe}

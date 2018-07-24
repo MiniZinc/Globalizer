@@ -1235,12 +1235,12 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
  let minizincExe = fromMaybe "minizinc" $ GOpts.minizincPath opts
  statisticsFlatZincCall
  statisticsTime "solving via minizinc" $ liftIO $ do
-  withTempFile "." "temp.mzn" $ \mznpath mznhandle -> do
+  withSystemTempFile "temp.mzn" $ \mznpath mznhandle -> do
     timeAction "solve/plainShow" $ hPutStrLn mznhandle (plainShow m)
     hClose mznhandle
 
-    withTempFile "." "output" $ \outpath outhandle -> do
-      withTempFile "." "error" $ \errpath errhandle -> do
+    withSystemTempFile "output" $ \outpath outhandle -> do
+      withSystemTempFile "error" $ \errpath errhandle -> do
         randomSeed <- (randomIO :: IO Word32)
         let gecodeSpecificArgs =
                 (if restart && nsols > 0 then "-restart luby" else "") ++ " " ++

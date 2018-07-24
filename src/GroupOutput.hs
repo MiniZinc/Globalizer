@@ -975,6 +975,8 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
           case ti of
                TypeInst { tiRanges = OrdinaryRanges rs, tiBase = BTInt, tiSet = Plain } -> ArgType ArgInt (genericLength rs)
                TypeInst { tiRanges = OrdinaryRanges rs, tiBase = BTInt, tiSet = Set } -> ArgType ArgSetInt (genericLength rs)
+               TypeInst { tiRanges = OrdinaryRanges rs, tiBase = BTBool, tiSet = Plain } -> ArgType ArgInt (genericLength rs)
+               TypeInst { tiRanges = OrdinaryRanges rs, tiBase = BTBool, tiSet = Set } -> ArgType ArgInt (genericLength rs)
                TypeInst { tiRanges = OrdinaryRanges rs, tiBase = BTUnknown,
                           tiDomain = Just (expRaw -> Ident i) } ->
                             fromMaybe (error ("couldn't look up \"" ++ i ++ "\"")) $ do

@@ -146,7 +146,7 @@ parseSolvingTimeout = option auto $
 
 parseNumJobs :: O.Parser Int
 parseNumJobs = option auto $
-  short 'j' <> long "jobs"
+  short 'p' <> long "jobs" <> long "parallel"
   <> metavar "<num>"
   <> help "Number of jobs to run in parallel"
   <> value 1

@@ -6,7 +6,7 @@ variables:
   before_script:
     - mkdir -p globalizer/share/globalizer
   script:
-    - stack --stack-root ${CI_PROJECT_DIR}/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
+    - stack --stack-root ${CI_PROJECT_DIR}/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins --verbose
     - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
     - cp globalizer.msc globalizer/share/globalizer/
   artifacts:
@@ -44,7 +44,7 @@ build:osx:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat"
     - mkdir globalizer\share\globalizer
   script:
-    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
+    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins --verbose
     - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
     - cp globalizer.msc globalizer/share/globalizer/
   tags:
@@ -60,7 +60,7 @@ build:win64:
     - call "C:\Program Files (x86)\Microsoft Visual Studio 14.0/VC/vcvarsall.bat" amd64
     - mkdir globalizer\share\globalizer
   script:
-    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins
+    - stack --stack-root %CI_PROJECT_DIR%/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins --verbose
     - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
     - cp globalizer.msc globalizer/share/globalizer/
   tags:

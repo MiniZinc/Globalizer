@@ -54,8 +54,10 @@ construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter
 
 initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics)
 initialPass opts logHandle = do
+  putStrLnOut("% Globalizer: Starting initial pass (find viewpoints). Skip this pass with --no-initial-pass.")
   let conFilter = Just "binaries_represent_int"
   (o,s) <- processModelAndData opts conFilter [] [] logHandle
+  putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
   extraItems3X <- mapM (construct3DChannelItem o introducedLocation) [ (1, "_3a", "_3A", "channelCAB", (2,3))
@@ -86,8 +88,9 @@ main2 opts = do
     else return ([], [], emptyStatistics)
 
   -- Run the full Globalizer
+  putStrLnOut("% Globalizer: Start full Globalizer pass")
   (o,s) <- processModelAndData opts (constraintFilter opts) extraItems channelMap logHandle
-
+  putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
   -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t
   let nameReps :: [ (GroupName, Replacement, Expression) ] 

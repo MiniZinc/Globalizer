@@ -1268,10 +1268,13 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
           SimpleLog.log logHandle LogDebug "fzn-gecode done/killed"
           return (p, e)
         case exitCode2 of
-          Just _ -> return ()
+          Just ExitSuccess -> do return ()
+          Just (ExitFailure _) -> do error $ "Minizinc compilation / solving failed."
           Nothing -> liftIO $ do -- terminateProcess ph2
-                                 void $ waitForProcessMsg "waiting for terminated process" ph2
-                                 return ()
+                                 e <- liftIO $ waitForProcessMsg "waiting for terminated process" ph2
+                                 case e of
+                                   ExitSuccess -> do return ()
+                                   (ExitFailure _) -> do error $ "MiniZinc compilation / solving failed."
         output <- do let attemptToRead = do
                            r <- try (BSC.readFile outpath)
                            case r of

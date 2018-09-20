@@ -61,6 +61,26 @@ import SimpleLog
 
 import GlobalizerOptions as GOpts
 
+
+splitFilter :: String -> [String]
+splitFilter consFilter = map (\t -> T.unpack t) (T.splitOn (T.pack ",") (T.pack consFilter))
+
+anyInfix :: String -> String -> Bool
+anyInfix consFilter call_id = any (\s -> (s `isInfixOf` call_id)) (splitFilter consFilter)
+
+type ConstraintFilter = (Constraint -> Bool)
+
+acceptableConstraint :: Maybe String -> Maybe String -> Constraint -> Bool
+acceptableConstraint includeCons excludeCons (Constraint name' _) =
+  and [ name' /= "atmost"
+      , name' /= "atleast"
+      , case includeCons of
+          Nothing -> True
+          Just s -> anyInfix s name'
+      , case excludeCons of
+          Nothing -> True
+          Just s -> not $ anyInfix s name']
+
 data AbortException = AbortException
   deriving (Show, Typeable)
 instance Exception AbortException
@@ -161,9 +181,15 @@ buildOutput replacements =
                          , " "
                          , prettyPrintify rep ])
 
-processGroupModels :: String -> Bindings -> Maybe Expression -> [Model]
-                      -> GlobalizerOptions -> Maybe String -> ChannelMap
-                      -> SimpleLog.Handle -> StateT Statistics IO [(Replacement, Double)]
+processGroupModels :: String
+                   -> Bindings
+                   -> Maybe Expression
+                   -> [Model]
+                   -> GlobalizerOptions
+                   -> ConstraintFilter
+                   -> ChannelMap
+                   -> SimpleLog.Handle
+                   -> StateT Statistics IO [(Replacement, Double)]
 processGroupModels dataFilePath env maybeContext models opts consFilter channelMap logHandle = do
   let m = head models
   SimpleLog.logPrint logHandle LogDebug m
@@ -811,7 +837,7 @@ processModelWrapper :: String
                     -> Model
                     -> Maybe [(Replacement,Double)]
                     -> GOpts.GlobalizerOptions
-                    -> Maybe String
+                    -> ConstraintFilter
                     -> ChannelMap
                     -> SimpleLog.Handle
                     -> StatisticsIO [(Replacement,Double)]
@@ -844,19 +870,13 @@ prepareModel dataFilePath env m opts logHandle = do
       throwingM failedProcessReason ImpliesCheck
   return modelToSolve
 
-splitFilter :: String -> [String]
-splitFilter consFilter = map (\t -> T.unpack t) (T.splitOn (T.pack ",") (T.pack consFilter))
-
-anyInfix :: String -> String -> Bool
-anyInfix consFilter call_id = any (\s -> (s `isInfixOf` call_id)) (splitFilter consFilter)
-
 processModel :: String
              -> Bindings
              -> Maybe (Expression)
              -> Model
              -> Maybe [(Replacement,Double)]
              -> GOpts.GlobalizerOptions
-             -> Maybe String
+             -> ConstraintFilter
              -> ChannelMap
              -> SimpleLog.Handle
              -> StatisticsIO [(Replacement,Double)]
@@ -1021,14 +1041,7 @@ processModel dataFilePath env maybeContext m' maybeReps opts consFilter channelM
 
   let argumentsByType = M.fromListWith (++) [ (t,[a]) | a <- potentialArguments, let mt = getArgType a, isJust mt, let Just t = mt ]
 
-  let acceptableConstraint (Constraint name' _) =
-          and [ name' /= "atmost"
-              , name' /= "atleast"
-              , case consFilter of
-                  Nothing -> True
-                  Just s -> anyInfix s name' ]
-
-  let constraintsToConsider = filter acceptableConstraint potentialConstraints
+  let constraintsToConsider = filter consFilter potentialConstraints
 
   SimpleLog.log logHandle LogHigh $ "considering " ++ show (length constraintsToConsider) ++ " constraints"
 
@@ -1323,8 +1336,22 @@ splitSolutions outputBlob =
 
 type GroupName = (Integer, (DisjointLocation, Maybe (Expression)))
 
-runGroupsModels :: String -> Bindings -> M.Map GroupName (S.Set (Model), Maybe (Expression)) -> GOpts.GlobalizerOptions -> Maybe String -> ChannelMap -> SimpleLog.Handle -> StatisticsIO [[(Replacement, Double)]]
-runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle = do
+groupIsSubset :: GroupName -> GroupName -> Bool
+groupIsSubset (_,(dl1,_)) (_,(dl2,_)) = disjointLocationContains dl1 dl2
+
+disjointLocationContains :: DisjointLocation -> DisjointLocation -> Bool
+disjointLocationContains (DisjointLocation locs1) (DisjointLocation locs2) = or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2]
+
+runGroupsModels :: String
+                -> Bindings
+                -> M.Map GroupName (S.Set (Model), Maybe (Expression))
+                -> GOpts.GlobalizerOptions
+                -> ConstraintFilter
+                -> [GroupName]
+                -> ChannelMap
+                -> SimpleLog.Handle
+                -> StatisticsIO [[(Replacement, Double)]]
+runGroupsModels dataFilePath env groupMap opts filterCons trues channelMap logHandle = do
   let selectedGroup = GOpts.selectGroup opts
   let runGroup :: Integer -> (GroupName, (S.Set (Model), Maybe (Expression)))
                -> IO ([(Replacement, Double)], Statistics)
@@ -1346,7 +1373,7 @@ runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle =
         (out,st) <- flip runStateT emptyStatistics $ do
                       flip catch (\AbortException -> return ([])) $ do
                         statisticsTime (T.pack ("group " ++ show groupNumber)) $ do
-                          processGroupModels dataFilePath env context (S.toList files) opts consFilter channelMap logHandle
+                          processGroupModels dataFilePath env context (S.toList files) opts filterCons channelMap logHandle
 
         let isTrue ((c,_),_) = name c == "true"
         let out2 = case find isTrue out of
@@ -1367,11 +1394,13 @@ runGroupsModels dataFilePath env groupMap opts consFilter channelMap logHandle =
     maybe (return ()) (SimpleLog.log logHandle LogDebug . showExp) (snd pair)
 
   -- The actions that will run all the groups.
-  let actions0 = map (uncurry runGroup) (zip [0..] (M.toList groupMap))
+  let groupList = filter (\(gn,_) -> not $ any (\t -> groupIsSubset gn t) trues) (M.toList groupMap)
+  let actions0 = map (uncurry runGroup) (zip [0..] groupList)
   -- If the user selected a specific group, only run that one.
   let actions = case selectedGroup of
                   Nothing -> actions0
                   Just idx -> [ actions0 !! idx ]
+
 
   -- Run all the actions in parallel, gathering the outputs and
   -- statistics.

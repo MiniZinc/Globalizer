@@ -18,7 +18,8 @@ data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
                        , debugging :: [LogCategory]
                        , stdlibDir :: Maybe String
                        , minizincPath :: Maybe String
-                       , constraintFilter :: Maybe String
+                       , constraintFilterIn :: Maybe String
+                       , constraintFilterEx :: Maybe String
                        , solvingTimeout :: Integer
                        , selectGroup :: Maybe Int
                        , numJobs :: Int
@@ -43,7 +44,8 @@ parseOptions = GlobalizerOptions
                  <*> parseDebugging
                  <*> parseStdlibDir
                  <*> parseMinizincPath
-                 <*> parseConstraintFilter
+                 <*> parseConstraintFilterIn
+                 <*> parseConstraintFilterEx
                  <*> parseSolvingTimeout
                  <*> parseSelectGroup
                  <*> parseNumJobs
@@ -118,11 +120,17 @@ parseDebugging =
            , (LogModel, "model", "group models")
            , (LogHigh, "high", "high-level progress") ]
 
-parseConstraintFilter :: O.Parser (Maybe String)
-parseConstraintFilter = optional $ option str $
-  short 'f' <> long "constraintFilter"
+parseConstraintFilterIn :: O.Parser (Maybe String)
+parseConstraintFilterIn = optional $ option str $
+  short 'f' <> long "constraintFilterIn"
   <> metavar "<substring>"
   <> help "Consider only constraints containing these comma seprated substrings"
+
+parseConstraintFilterEx :: O.Parser (Maybe String)
+parseConstraintFilterEx = optional $ option str $
+  short 'e' <> long "constraintFilterEx"
+  <> metavar "<substring>"
+  <> help "Do not consider only constraints containing these comma seprated substrings"
 
 parseStdlibDir :: O.Parser (Maybe String)
 parseStdlibDir = optional $ option str $

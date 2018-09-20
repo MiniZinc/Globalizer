@@ -7,6 +7,7 @@ import Control.Monad
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
+import qualified Data.Text as T
 import System.IO
 import Data.Semigroup ((<>))
 import qualified Data.Monoid
@@ -27,6 +28,7 @@ import GlobalizerOptions as GOpts
 main :: IO ()
 main = do
   main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer")
+
 
 construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter,  channelName, (other1, other2)) = do
   let bri3xs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs
@@ -52,11 +54,11 @@ construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter
                      , ConstraintI (newConstraint & expLocation .~ introducedLocation)]
     return (extraItems, (x, xDim, [other1,other2]))
 
-initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics)
+initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics, [GroupName])
 initialPass opts logHandle = do
   putStrLnOut("% Globalizer: Starting initial pass (find viewpoints). Skip this pass with --no-initial-pass.")
-  let conFilter = Just "binaries_represent_int"
-  (o,s) <- processModelAndData opts conFilter [] [] logHandle
+  let includeCons = Just "binaries_represent_int,true"
+  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) [] [] [] logHandle
   putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
@@ -66,9 +68,12 @@ initialPass opts logHandle = do
   let extraItems = foldl (++) [] (map (concat . map fst) extraItems3X)
   let channelMap = foldl (++) [] (map (map snd) extraItems3X)
 
+  let trues = nub [ gn | ((gn,(_,_)),rs) <- o
+                  , any (\((c,_),_) -> name c == "true") rs]
+
   if null extraItems
-    then return ([], [], s)
-    else return (IncludeI "glob.mzn" Nothing : extraItems, channelMap, s)
+    then return ([], [], s, trues)
+    else return (IncludeI "glob.mzn" Nothing : extraItems, channelMap, s, trues)
 
 putStrLnOut :: String -> IO()
 putStrLnOut t = hPutStr stdout $ t ++ "\n"
@@ -82,14 +87,18 @@ main2 opts = do
   logHandle <- SimpleLog.newHandle (debugging opts) stderr
 
   -- Perform the initial pass
-  (extraItems, channelMap, initialPassStats) <-
+  (extraItems, channelMap, initialPassStats, trues) <-
     if doInitialPass opts
     then initialPass (opts { selectGroup = Nothing }) logHandle
-    else return ([], [], emptyStatistics)
+    else return ([], [], emptyStatistics, [])
 
   -- Run the full Globalizer
   putStrLnOut("% Globalizer: Start full Globalizer pass")
-  (o,s) <- processModelAndData opts (constraintFilter opts) extraItems channelMap logHandle
+  let includeCons = constraintFilterIn opts
+  let excludeCons = case (constraintFilterEx opts) of
+                      Nothing -> Just "true"
+                      Just s -> Just $ s ++ ",true"
+  (o,s) <- processModelAndData opts (acceptableConstraint includeCons excludeCons) trues extraItems channelMap logHandle
   putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
   -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t

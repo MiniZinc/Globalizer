@@ -58,7 +58,7 @@ initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], Channe
 initialPass opts logHandle = do
   putStrLnOut("% Globalizer: Starting initial pass (find viewpoints). Skip this pass with --no-initial-pass.")
   let includeCons = Just "binaries_represent_int,true"
-  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) [] [] [] logHandle
+  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) (acceptableGroup [] []) [] [] logHandle
   putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
@@ -98,7 +98,12 @@ main2 opts = do
   let excludeCons = case (constraintFilterEx opts) of
                       Nothing -> Just "true"
                       Just s -> Just $ s ++ ",true"
-  (o,s) <- processModelAndData opts (acceptableConstraint includeCons excludeCons) trues extraItems channelMap logHandle
+  (o,s) <- processModelAndData opts
+                               (acceptableConstraint includeCons excludeCons)
+                               (acceptableGroupFromGroups [] trues)
+                               extraItems
+                               channelMap
+                               logHandle
   putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
   -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t

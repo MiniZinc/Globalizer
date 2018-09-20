@@ -1342,16 +1342,34 @@ groupIsSubset (_,(dl1,_)) (_,(dl2,_)) = disjointLocationContains dl1 dl2
 disjointLocationContains :: DisjointLocation -> DisjointLocation -> Bool
 disjointLocationContains (DisjointLocation locs1) (DisjointLocation locs2) = or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2]
 
+getDisjointLocations :: [GroupName] -> [DisjointLocation]
+getDisjointLocations gns = [dl | (_, (dl, _)) <- gns]
+
+type GroupFilter = (GroupName -> Bool)
+
+acceptableGroupFromGroups :: [GroupName] -> [GroupName] -> (GroupName -> Bool)
+acceptableGroupFromGroups includeGroups excludeGroups = acceptableGroup (getDisjointLocations includeGroups) (getDisjointLocations excludeGroups)
+
+acceptableGroup :: [DisjointLocation] -> [DisjointLocation] -> GroupName -> Bool
+acceptableGroup includeDLocs excludeDLocs (_, (dl, _)) =
+  and [ case length includeDLocs of
+          0 -> True
+          _ -> and [ disjointLocationContains idl dl | idl <- includeDLocs ]
+      , case length excludeDLocs of
+          0 -> True
+          _ -> not $ or [ disjointLocationContains dl edl | edl <- excludeDLocs ]
+      ]
+
 runGroupsModels :: String
                 -> Bindings
                 -> M.Map GroupName (S.Set (Model), Maybe (Expression))
                 -> GOpts.GlobalizerOptions
                 -> ConstraintFilter
-                -> [GroupName]
+                -> GroupFilter
                 -> ChannelMap
                 -> SimpleLog.Handle
                 -> StatisticsIO [[(Replacement, Double)]]
-runGroupsModels dataFilePath env groupMap opts filterCons trues channelMap logHandle = do
+runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMap logHandle = do
   let selectedGroup = GOpts.selectGroup opts
   let runGroup :: Integer -> (GroupName, (S.Set (Model), Maybe (Expression)))
                -> IO ([(Replacement, Double)], Statistics)
@@ -1394,7 +1412,7 @@ runGroupsModels dataFilePath env groupMap opts filterCons trues channelMap logHa
     maybe (return ()) (SimpleLog.log logHandle LogDebug . showExp) (snd pair)
 
   -- The actions that will run all the groups.
-  let groupList = filter (\(gn,_) -> not $ any (\t -> groupIsSubset gn t) trues) (M.toList groupMap)
+  let groupList = filter (\(gn,_) -> filterGroups gn) (M.toList groupMap)
   let actions0 = map (uncurry runGroup) (zip [0..] groupList)
   -- If the user selected a specific group, only run that one.
   let actions = case selectedGroup of

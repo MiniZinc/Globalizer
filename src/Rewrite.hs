@@ -17,7 +17,7 @@ import qualified Data.Set as S
 import qualified Data.Map as M
 import System.IO
 
-import GroupOutput (runGroupsModels, GroupName, ConstraintFilter)
+import GroupOutput (runGroupsModels, GroupName, ConstraintFilter, GroupFilter)
 import Loc
 import Misc
 import Normalisation
@@ -132,7 +132,7 @@ instantiate ((constraint, pairs):newConstraints) = do
 
 processModelAndData :: GOpts.GlobalizerOptions 
                     -> ConstraintFilter
-                    -> [GroupName]
+                    -> GroupFilter
                     -> [Item]
                     -> ChannelMap
                     -> SimpleLog.Handle
@@ -143,7 +143,7 @@ processModelAndData :: GOpts.GlobalizerOptions
                            ],
                            Statistics
                           )
-processModelAndData opts consFilter trues extraItems channelMap logHandle = do
+processModelAndData opts consFilter groupFilter extraItems channelMap logHandle = do
   let incDir = (fromMaybe "./mznlib/globalizer" $ GOpts.stdlibDir opts)
   let maxCons = GOpts.maxConstraints opts
   let modelFile = head $ (filter (isSuffixOf ".mzn") (GOpts.inputFiles opts))
@@ -181,7 +181,7 @@ processModelAndData opts consFilter trues extraItems channelMap logHandle = do
     let modelSets' = filter (not . S.null . fst . snd) (modelSets)
     let modelMap = M.fromList modelSets'
 
-    o <- runGroupsModels incDir env modelMap opts consFilter trues channelMap logHandle
+    o <- runGroupsModels incDir env modelMap opts consFilter groupFilter channelMap logHandle
     return (o, modelMap)
   return (zip (M.toList modelMap) o,stats)
 

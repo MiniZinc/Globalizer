@@ -22,6 +22,8 @@ data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
                        , constraintFilterEx :: Maybe String
                        , solvingTimeout :: Integer
                        , selectGroup :: Maybe Int
+                       , includePaths :: Maybe String
+                       , excludePaths :: Maybe String
                        , numJobs :: Int
                        , filterArguments :: Bool
                        , maxArguments :: Int
@@ -48,6 +50,8 @@ parseOptions = GlobalizerOptions
                  <*> parseConstraintFilterEx
                  <*> parseSolvingTimeout
                  <*> parseSelectGroup
+                 <*> parseIncludePaths
+                 <*> parseExcludePaths
                  <*> parseNumJobs
                  <*> parseFilterArguments
                  <*> parseMaxArguments
@@ -55,6 +59,18 @@ parseOptions = GlobalizerOptions
                  <*> parseDoImpliesCheck
                  <*> parseDoOutputHTML
                  <*> parseFreeSearch
+
+parseIncludePaths :: O.Parser (Maybe String)
+parseIncludePaths = optional $ option str $
+  short 'i' <> long "includePaths"
+  <> metavar "<space separated line numbers>"
+  <> help "Consider only constraints within the path spans provided. \"sl|sc|el|ec;sl|sc|el|ec\" "
+
+parseExcludePaths :: O.Parser (Maybe String)
+parseExcludePaths = optional $ option str $
+  short 'i' <> long "excludePaths"
+  <> metavar "<space separated line numbers>"
+  <> help "Ignore constraints within the path spans provided. \"sl|sc|el|ec;sl|sc|el|ec\" "
 
 parseSelectGroup :: O.Parser (Maybe Int)
 parseSelectGroup = optional $ option auto $

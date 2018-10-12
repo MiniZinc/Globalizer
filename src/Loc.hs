@@ -6,6 +6,7 @@ module Loc where
 import Control.Lens
 import Data.Data
 import Data.List
+import qualified Data.Text as T 
 import Data.Monoid
 import Data.Ord
 import Language.MiniZinc
@@ -66,13 +67,34 @@ positionAfter :: Position -> Position -> Bool
 positionAfter p1 p2 =
     posName p1 == posName p2
     && (posLine p1, posColumn p1) >= (posLine p2, posColumn p2)
-              
+
 showDisjointLocation :: String -> DisjointLocation -> String
 showDisjointLocation modelFile (DisjointLocation locs) =
     intercalate ";" (map f (sort locs))
   where
     f (Location (Position _ l1 c1) (Position _ l2 c2)) =
         printf "%s|%d|%d|%d|%d" modelFile l1 c1 l2 c2
+
+split :: String -> String -> [String]
+split sep s = map T.unpack (T.splitOn (T.pack sep) (T.pack s))
+
+splitPaths :: String -> [String]
+splitPaths paths = split ";" paths
+
+splitPath :: String -> [String]
+splitPath path = split "|" path
+
+v4tot4 :: [a] -> (a,a,a,a)
+v4tot4 [sl,sc,el,ec] = (sl,sc,el,ec)
+v4tot4 xs = error "Not enough elements in list"
+
+pathToTuples :: String -> [(Int, Int, Int, Int)]
+pathToTuples paths = [ v4tot4 [ read i :: Int | i <- splitPath path ] | path <- splitPaths paths ]
+
+pathsToDisjointLocation :: String -> DisjointLocation
+pathsToDisjointLocation paths = DisjointLocation (map (\(sl,sc,el,ec) -> Location (Position "input" sl sc)
+                                                                                  (Position "input" el ec))
+                                                      (pathToTuples paths))
 
 showExpLocation :: String -> Expression -> String
 showExpLocation modelFile e =

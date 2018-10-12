@@ -46,6 +46,8 @@ import System.Random
 import System.Timeout
 import Text.Printf
 
+import Debug.Trace as DT
+
 import System.IO.Unsafe
 
 import Arguments
@@ -1340,7 +1342,15 @@ groupIsSubset :: GroupName -> GroupName -> Bool
 groupIsSubset (_,(dl1,_)) (_,(dl2,_)) = disjointLocationContains dl1 dl2
 
 disjointLocationContains :: DisjointLocation -> DisjointLocation -> Bool
-disjointLocationContains (DisjointLocation locs1) (DisjointLocation locs2) = or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2]
+disjointLocationContains (DisjointLocation locs1) (DisjointLocation locs2) =
+  DT.trace 
+    ((showDisjointLocation "" (DisjointLocation locs1))
+     ++ " "
+     ++ (showDisjointLocation "" (DisjointLocation locs2))
+     ++ " : "
+     ++ show (or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2])
+     ++ "\n")
+    (or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2])
 
 getDisjointLocations :: [GroupName] -> [DisjointLocation]
 getDisjointLocations gns = [dl | (_, (dl, _)) <- gns]
@@ -1354,10 +1364,10 @@ acceptableGroup :: [DisjointLocation] -> [DisjointLocation] -> GroupName -> Bool
 acceptableGroup includeDLocs excludeDLocs (_, (dl, _)) =
   and [ case length includeDLocs of
           0 -> True
-          _ -> and [ disjointLocationContains idl dl | idl <- includeDLocs ]
+          _ -> or [ disjointLocationContains idl dl | idl <- includeDLocs ]
       , case length excludeDLocs of
           0 -> True
-          _ -> not $ or [ disjointLocationContains dl edl | edl <- excludeDLocs ]
+          _ -> not $ or [ disjointLocationContains edl dl | edl <- excludeDLocs ]
       ]
 
 runGroupsModels :: String

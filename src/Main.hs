@@ -58,7 +58,14 @@ initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], Channe
 initialPass opts logHandle = do
   putStrLnOut("% Globalizer: Starting initial pass (find viewpoints). Skip this pass with --no-initial-pass.")
   let includeCons = Just "binaries_represent_int,true"
-  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) (acceptableGroup [] []) [] [] logHandle
+  let includePaths = case GOpts.includePaths opts of
+                       Just paths -> [pathsToDisjointLocation paths]
+                       Nothing -> []
+  let excludePaths = case GOpts.excludePaths opts of
+                       Just paths -> [pathsToDisjointLocation paths]
+                       Nothing -> []
+
+  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) (acceptableGroup includePaths excludePaths) [] [] logHandle
   putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
@@ -98,9 +105,15 @@ main2 opts = do
   let excludeCons = case (constraintFilterEx opts) of
                       Nothing -> Just "true"
                       Just s -> Just $ s ++ ",true"
+  let includePaths = case GOpts.includePaths opts of
+                       Just paths -> [pathsToDisjointLocation paths]
+                       Nothing -> []
+  let excludePaths = case GOpts.excludePaths opts of
+                       Just paths -> [pathsToDisjointLocation paths]
+                       Nothing -> []
   (o,s) <- processModelAndData opts
                                (acceptableConstraint includeCons excludeCons)
-                               (acceptableGroupFromGroups [] trues)
+                               (acceptableGroup includePaths (excludePaths ++ getDisjointLocations trues))
                                extraItems
                                channelMap
                                logHandle

@@ -182,7 +182,7 @@ variants sm = do
                                                                                   , _genLocation = Nothing } | (vd,domain) <- zip generatedVarDecls (map snd unrollset) ]
                                                         , _compWhere = Nothing
                                                         , _compType = ArrayComprehension
-                                                        , _compBody = locExp (Call "forall" [arrayLit bodies]) } ))
+                                                        , _compBody = ( if length bodies > 1 then (locExp (Call "forall" [arrayLit bodies])) else (head bodies) ) } ))
           in e
                        
   -- As a special case, if nothing was actually unrolled, we can just

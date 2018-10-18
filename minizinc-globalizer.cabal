@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                minizinc-globalizer
-version:             0.1.5.0
+version:             0.1.6.0
 synopsis:            Globalizer for MiniZinc
 author:              Chris Mears
 maintainer:          kevin.leo@monash.edu

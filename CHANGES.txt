@@ -1,0 +1,19 @@
+======================
+# Globalizer Changelog #
+======================
+
+
+Version 0.1.6.0
+=============
+
+Changes:
+ - Initial pass searches for redundant submodels (can be replaced by "constraint true")
+   These submodels are not explored in the full (second) Globalizer pass
+ - Added ability to select which parts of a model should be included/excluded using paths
+   (Text spans)a
+
+Bug fixes:
+ - Don't create 'forall' constraints with only a single element:
+   'constraint forall([C])' should be represented as 'constraint C'
+ - Allow for trailing comma in arguments of Calls: previously "C(a,)" could not be
+   parsed

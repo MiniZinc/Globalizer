@@ -27,7 +27,7 @@ import GlobalizerOptions as GOpts
 
 main :: IO ()
 main = do
-  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer")
+  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.6.0")
 
 
 construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter,  channelName, (other1, other2)) = do

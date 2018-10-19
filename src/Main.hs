@@ -29,6 +29,16 @@ main :: IO ()
 main = do
   main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.6.0")
 
+makeTI inst ranges dom = 
+  TypeInst { tiInst = inst
+           , tiBase = BTInt
+           , tiRanges = ranges
+           , tiSet = Plain
+           , tiOpt = OptPlain
+           , tiDomain = dom
+           }
+
+makeIndexSetOf3Call dim var = Just . mkExp $ Call("index_set" ++ show dim ++ "of3") [ mkExp (Ident var) ]
 
 construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter,  channelName, (other1, other2)) = do
   let bri3xs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs
@@ -36,16 +46,10 @@ construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter
                    , let ErstwhileVariable x = head args ]
   forM bri3xs $ \x -> do
     let xDim = x ++ dimLowerLetter
-    let ti = TypeInst { tiInst = Var, tiBase = BTInt
-                      , tiRanges = OrdinaryRanges [
-                                     TypeInst { tiInst = Par,   tiBase = BTInt,   tiRanges = OrdinaryRanges []
-                                              , tiSet  = Plain, tiOpt  = OptPlain
-                                              , tiDomain = Just . mkExp $ Call ("index_set_" ++ show other1 ++ "of3") [ mkExp (Ident x) ] }
-                                   , TypeInst { tiInst = Par,   tiBase = BTInt,  tiRanges = OrdinaryRanges []
-                                              , tiSet  = Plain, tiOpt  = OptPlain
-                                              , tiDomain = Just . mkExp $ Call ("index_set_" ++ show other2 ++ "of3") [ mkExp (Ident x) ] } ]
-                      , tiSet = Plain, tiOpt = OptPlain
-                      , tiDomain = (Just . mkExp) (Call ("index_set_" ++ show dim ++ "of3") [ mkExp (Ident x) ]) }
+    let is1 = makeIndexSetOf3Call other1 x
+    let is2 = makeIndexSetOf3Call other2 x
+    let isd = makeIndexSetOf3Call dim x
+    let ti = makeTI Var (OrdinaryRanges [ makeTI Par (OrdinaryRanges []) is1, makeTI Par (OrdinaryRanges []) is2]) isd
     let newVarDecl = VarDecl { _varDeclTypeInst   = ti,      _varDeclIdent       = xDim
                              , _varDeclExpression = Nothing, _varDeclAnnotations = mempty
                              , _varDeclLocation   = Nothing, _varDeclId          = Nothing }
@@ -65,7 +69,12 @@ initialPass opts logHandle = do
                        Just paths -> [pathsToDisjointLocation paths]
                        Nothing -> []
 
-  (o,s) <- processModelAndData opts (acceptableConstraint includeCons Nothing) (acceptableGroup includePaths excludePaths) [] [] logHandle
+  (o,s) <- processModelAndData opts 
+                               (acceptableConstraint includeCons Nothing)
+                               (acceptableGroup includePaths excludePaths)
+                               []
+                               []
+                               logHandle
   putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
@@ -111,6 +120,7 @@ main2 opts = do
   let excludePaths = case GOpts.excludePaths opts of
                        Just paths -> [pathsToDisjointLocation paths]
                        Nothing -> []
+
   (o,s) <- processModelAndData opts
                                (acceptableConstraint includeCons excludeCons)
                                (acceptableGroup includePaths (excludePaths ++ getDisjointLocations trues))
@@ -119,6 +129,14 @@ main2 opts = do
                                logHandle
   putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
+  printOutput opts o trues
+  printStats s initialPassStats
+
+printOutput :: GOpts.GlobalizerOptions
+               -> [ (( GroupName, (S.Set (Model), Maybe (Expression)) ), [(Replacement, Double)]) ]
+               -> [ GroupName ]
+               -> IO ()
+printOutput opts o trues = do
   -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t
   let nameReps :: [ (GroupName, Replacement, Expression) ] 
       nameReps =  [ (name, replacement, constraint)
@@ -136,6 +154,13 @@ main2 opts = do
   if (doOutputHTML opts)
   then do
     putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("<h1>Redundant submodels:</h1><ul>")
+    if length trues > 0 then 
+      mapM_ (\l -> putStrLnOut $ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "\">redundant/true</a></li>")
+            (getDisjointLocations trues)
+    else
+      putStrLnOut "<li>None</li>"
+    putStrLnOut("</ul>")
     putStrLnOut("<h1>Found Globals:</h1><ul>")
     mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
       if shadowed ((n,(l,ml)),r,c)
@@ -146,14 +171,25 @@ main2 opts = do
         else "") ++ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">" ++ prettyPrintify r ++ "</a></li>")) realReplacements
     putStrLnOut("</ul>")
     putStrLnOut("%%%mzn-html-end")
-  else mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
-    if shadowed ((n,(l,ml)),r,c)
-    then "*** "
-    else "") ++ (
-      if vacuous ((l,ml),r,c)
-      then "### "
-      else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+  else do
+    putStrLnOut "Redundant submodels:"
+    if length trues > 0 then
+      mapM_ (\l -> putStrLnOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
+            (getDisjointLocations trues)
+    else
+      putStrLnOut "None"
 
+    putStrLnOut "\nFound Globals:"
+    mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
+      if shadowed ((n,(l,ml)),r,c)
+      then "*** "
+      else "") ++ (
+        if vacuous ((l,ml),r,c)
+        then "### "
+        else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+
+printStats :: Statistics -> Statistics -> IO ()
+printStats s initialPassStats = do
   let allStats = s Data.Monoid.<> initialPassStats
   putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
   putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)

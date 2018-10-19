@@ -157,8 +157,6 @@ processModelAndData opts consFilter groupFilter extraItems channelMap logHandle 
       , "after:", plainShow normalisedModel, "" ]
     let gs = getGroups maxCons normalisedModel
 
-    liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length gs)
-
     ds' <- liftIO (mapM readModel dataFiles)
     let ds = case ds' of
                [] -> [Model []]

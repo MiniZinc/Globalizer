@@ -46,8 +46,6 @@ import System.Random
 import System.Timeout
 import Text.Printf
 
-import Debug.Trace as DT
-
 import System.IO.Unsafe
 
 import Arguments
@@ -1343,14 +1341,7 @@ groupIsSubset (_,(dl1,_)) (_,(dl2,_)) = disjointLocationContains dl1 dl2
 
 disjointLocationContains :: DisjointLocation -> DisjointLocation -> Bool
 disjointLocationContains (DisjointLocation locs1) (DisjointLocation locs2) =
-  DT.trace 
-    ((showDisjointLocation "" (DisjointLocation locs1))
-     ++ " "
-     ++ (showDisjointLocation "" (DisjointLocation locs2))
-     ++ " : "
-     ++ show (or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2])
-     ++ "\n")
-    (or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2])
+  or [locationInside l2 l1 | l1 <- locs1, l2 <- locs2]
 
 getDisjointLocations :: [GroupName] -> [DisjointLocation]
 getDisjointLocations gns = [dl | (_, (dl, _)) <- gns]
@@ -1423,6 +1414,8 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
 
   -- The actions that will run all the groups.
   let groupList = filter (\(gn,_) -> filterGroups gn) (M.toList groupMap)
+  liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length groupList)
+
   let actions0 = map (uncurry runGroup) (zip [0..] groupList)
   -- If the user selected a specific group, only run that one.
   let actions = case selectedGroup of

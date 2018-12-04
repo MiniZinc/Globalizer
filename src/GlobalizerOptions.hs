@@ -62,13 +62,13 @@ parseOptions = GlobalizerOptions
 
 parseIncludePaths :: O.Parser (Maybe String)
 parseIncludePaths = optional $ option str $
-  short 'i' <> long "includePaths"
+  long "includePaths"
   <> metavar "<space separated line numbers>"
   <> help "Consider only constraints within the path spans provided. \"sl|sc|el|ec;sl|sc|el|ec\" "
 
 parseExcludePaths :: O.Parser (Maybe String)
 parseExcludePaths = optional $ option str $
-  short 'i' <> long "excludePaths"
+  long "excludePaths"
   <> metavar "<space separated line numbers>"
   <> help "Ignore constraints within the path spans provided. \"sl|sc|el|ec;sl|sc|el|ec\" "
 

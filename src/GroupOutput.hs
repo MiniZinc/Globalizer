@@ -597,10 +597,10 @@ check _ _nsols "binaries_represent_int_3B" [b] = isVariable b
 check _ _nsols "binaries_represent_int_3C" [b] = isVariable b
 check _ _nsols "channel" [x,a] =
 --    is1DArray bs a && isInt bs x
-    (isVariable a || isVariable x)
+    (isVariable a || isVariable x) && x /= a
 check _ _nsols "channelACB" [x,a] =
 --    is1DArray bs a && isInt bs x
-    (isVariable a || isVariable x)
+    (isVariable a || isVariable x) && x /= a
 check _ _nsols "circuit_checking" [x] = isVariable x -- && is1DArray bs x
 check _ _nsols "count" [x,_,_] = isVariable x -- && is1DArray bs x
                                           -- && isInt bs y
@@ -667,12 +667,12 @@ check _ _nsols "sum_constraint" [_,x] = isVariable x -- && is1DArray bs x
 check _ _nsols "unary" [s,d] =
     -- is1DArray bs s
     -- && is1DArray bs d
-     (isVariable s || isVariable d)
-check _ _ "value_precede" [s,t,x] = isNotVariable s -- && isInt bs s
-                                                  && isNotVariable t -- && isInt bs t
-                                                  && isVariable x -- && is1DArray bs x
---                                                  && (appearsIn bs nsols s x && appearsIn bs nsols t  x)
-                                                  && s /= t
+    (isVariable s || isVariable d) && s /= d
+check _ _ "value_precede" [s,t,x] =    isNotVariable s -- && isInt bs s
+                                    && isNotVariable t -- && isInt bs t
+                                    && isVariable x -- && is1DArray bs x
+                                    -- && (appearsIn bs nsols s x && appearsIn bs nsols t  x)
+                                    && s /= t
 check bs nsols "value_precede_checking" args = check bs nsols "value_precede" args
 check _bs _nsols _cname _args = True
 
@@ -1266,8 +1266,7 @@ solve dataFilePath restart m opts logHandle = timeAction "solve" $ do
                 , "--output-mode", "dzn"
                 , "-I", dataFilePath
                 , "-n", (show nsols)
-                , "--fzn-time-limit"
-                , show $ solveTimeout
+                , "-t", show $ solveTimeout
                 , "--fzn-flags", gecodeSpecificArgs
                 , mznpath]
         (_,_,_,rp) <- createProcess (proc minizincExe args) {std_out = UseHandle outhandle,

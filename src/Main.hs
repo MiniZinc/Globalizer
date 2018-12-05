@@ -38,7 +38,7 @@ makeTI inst ranges dom =
            , tiDomain = dom
            }
 
-makeIndexSetOf3Call dim var = Just . mkExp $ Call("index_set" ++ show dim ++ "of3") [ mkExp (Ident var) ]
+makeIndexSetOf3Call dim var = Just . mkExp $ Call("index_set_" ++ show dim ++ "of3") [ mkExp (Ident var) ]
 
 construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter,  channelName, (other1, other2)) = do
   let bri3xs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs

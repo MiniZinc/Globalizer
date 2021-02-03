@@ -200,8 +200,8 @@ printOutput opts o trues = do
         then "### "
         else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
           " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">highlight</a>," ++
-          -- "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>)" ++
-          "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Documentation</a>," ++
+          "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>)" ++
+          -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Documentation</a>," ++
           "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ constraintName (name (fst r)) ++ ".html\">GCCatalog</a>]" ++
           "</li>")) realReplacements
     putStrLnOut("<br>")

@@ -509,9 +509,9 @@ core :: Constraint -> [Expression] -> [Item]
 core c args = [ ConstraintI (makeExp $ Call (name c) args) ]
 
 extra :: String -> [Expression] -> [Item]
-extra "alldifferent" [x] = notSingleton x
+extra "all_different" [x] = notSingleton x
 extra "alldifferent_except_0" [x] =
-  extra "alldifferent" [x]
+  extra "all_different" [x]
   ++ [ ConstraintI (makeExp $ Call "member" [x,makeExp $ IntLit 0]) ]
   ++ [ ConstraintI (makeExp $ Call "atmost" [makeExp $ BinOp (makeExp $ Call "length" [x]) BinOpMinus (makeExp $ IntLit 2),x,makeExp $ IntLit 0]) ]
 extra "all_equal_int" [x] = notSingleton x
@@ -570,7 +570,7 @@ notSingleton :: Expression -> [Item]
 notSingleton x = [ ConstraintI (makeExp $ BinOp (makeExp $ Call "length" [x]) BinOpGr (makeExp $ IntLit 1)) ]
 
 check :: Bindings -> Int -> String -> [Argument] -> Bool
-check _ _nsols "alldifferent" [x] = isVariable x -- && is1DArray bs x
+check _ _nsols "all_different" [x] = isVariable x -- && is1DArray bs x
 check _ _nsols "alldifferent_except_0" [x] = isVariable x -- && is1DArray bs x
 check _ _nsols "all_equal_int" [x] = isVariable x -- && is1DArray bs x
 check _ _ "atleast" [_,x,_] = {-# SCC "insideCheck" #-} isVariable x -- && is1DArray bs x
@@ -1413,7 +1413,10 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
 
   -- The actions that will run all the groups.
   let groupList = filter (\(gn,_) -> filterGroups gn) (M.toList groupMap)
-  liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length groupList)
+  if GOpts.doOutputHTML opts then do
+    liftIO $ putStrLn $ "%%%mzn-html-start\n" ++ "NUMGROUPS: " ++ show (length groupList) ++ "\n%%%mzn-html-end"
+  else do
+    liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length groupList)
 
   let actions0 = map (uncurry runGroup) (zip [0..] groupList)
   -- If the user selected a specific group, only run that one.
@@ -1472,7 +1475,7 @@ argInt3 = ArgType ArgInt 3
 
 potentialConstraints :: [Constraint]
 potentialConstraints = map (uncurry Constraint)
-                       [ ("alldifferent",[argInt1])
+                       [ ("all_different",[argInt1])
                        , ("alldifferent_except_0",[argInt1])
                        , ("all_equal_int", [argInt1])
                        , ("atleast", [argInt0, argInt1, argInt0])

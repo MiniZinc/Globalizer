@@ -27,7 +27,7 @@ import GlobalizerOptions as GOpts
 
 main :: IO ()
 main = do
-  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.6.0")
+  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.7.0")
 
 makeTI inst ranges dom = 
   TypeInst { tiInst = inst
@@ -60,7 +60,14 @@ construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter
 
 initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics, [GroupName])
 initialPass opts logHandle = do
-  putStrLnOut("% Globalizer: Starting initial pass (find viewpoints). Skip this pass with --no-initial-pass.")
+  if (doOutputHTML opts)
+  then do
+    putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("Starting initial Globalizer pass; Skip this pass with --no-initial-pass.")
+    putStrLnOut("%%%mzn-html-end")
+  else
+    putStrLnOut("% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.")
+
   let includeCons = Just "binaries_represent_int,true"
   let includePaths = case GOpts.includePaths opts of
                        Just paths -> [pathsToDisjointLocation paths]
@@ -75,7 +82,6 @@ initialPass opts logHandle = do
                                []
                                []
                                logHandle
-  putStrLnOut("% Globalizer: Finished initial pass")
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
   extraItems3X <- mapM (construct3DChannelItem o introducedLocation) [ (1, "_3a", "_3A", "channelCAB", (2,3))
@@ -86,6 +92,14 @@ initialPass opts logHandle = do
 
   let trues = nub [ gn | ((gn,(_,_)),rs) <- o
                   , any (\((c,_),_) -> name c == "true") rs]
+
+  if (doOutputHTML opts)
+  then do
+    putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.")
+    putStrLnOut("%%%mzn-html-end")
+  else do
+    putStrLnOut("% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\n")
 
   if null extraItems
     then return ([], [], s, trues)
@@ -109,7 +123,14 @@ main2 opts = do
     else return ([], [], emptyStatistics, [])
 
   -- Run the full Globalizer
-  putStrLnOut("% Globalizer: Start full Globalizer pass")
+  if (doOutputHTML opts)
+  then do
+    putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("Starting full Globalizer pass")
+    putStrLnOut("%%%mzn-html-end")
+  else
+    putStrLnOut("% Globalizer: Start full Globalizer pass")
+
   let includeCons = constraintFilterIn opts
   let excludeCons = case (constraintFilterEx opts) of
                       Nothing -> Just "true"
@@ -127,10 +148,16 @@ main2 opts = do
                                extraItems
                                channelMap
                                logHandle
-  putStrLnOut("% Globalizer: Finished full Globalizer pass")
+  if (doOutputHTML opts)
+  then do 
+    putStrLnOut("%%%mzn-html-start")
+    putStrLnOut("Globalizer pass complete")
+    putStrLnOut("%%%mzn-html-end")
+  else
+    putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
   printOutput opts o trues
-  printStats s initialPassStats
+  printStats s initialPassStats (doOutputHTML opts)
 
 printOutput :: GOpts.GlobalizerOptions
                -> [ (( GroupName, (S.Set (Model), Maybe (Expression)) ), [(Replacement, Double)]) ]
@@ -154,30 +181,41 @@ printOutput opts o trues = do
   if (doOutputHTML opts)
   then do
     putStrLnOut("%%%mzn-html-start")
-    putStrLnOut("<h1>Redundant submodels:</h1><ul>")
-    if length trues > 0 then 
-      mapM_ (\l -> putStrLnOut $ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "\">redundant/true</a></li>")
+
+    if length trues > 0 then do
+      putStrLnOut("<h2>Redundant submodels:</h2>")
+      mapM_ (\l -> putStrLnOut $ "<br>&nbsp;&#8226;&nbsp;<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "\">redundant/true</a>")
             (getDisjointLocations trues)
+      putStrLnOut("<br>")
     else
-      putStrLnOut "<li>None</li>"
-    putStrLnOut("</ul>")
-    putStrLnOut("<h1>Found Globals:</h1><ul>")
+      return ()
+
+
+    putStrLnOut("<h2>Found Globals:</h2>")
     mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
       if shadowed ((n,(l,ml)),r,c)
       then "*** "
       else "") ++ (
         if vacuous ((l,ml),r,c)
         then "### "
-        else "") ++ "<li><a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">" ++ prettyPrintify r ++ "</a></li>")) realReplacements
-    putStrLnOut("</ul>")
+        else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
+          " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">highlight</a>," ++
+          -- "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>)" ++
+          "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Documentation</a>," ++
+          "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ constraintName (name (fst r)) ++ ".html\">GCCatalog</a>]" ++
+          "</li>")) realReplacements
+    putStrLnOut("<br>")
     putStrLnOut("%%%mzn-html-end")
   else do
-    putStrLnOut "Redundant submodels:"
-    if length trues > 0 then
-      mapM_ (\l -> putStrLnOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
-            (getDisjointLocations trues)
+    if length trues > 0 then do
+      putStrLnOut "Redundant submodels:"
+      if length trues > 0 then
+        mapM_ (\l -> putStrLnOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
+              (getDisjointLocations trues)
+      else
+        putStrLnOut "None"
     else
-      putStrLnOut "None"
+      return ()
 
     putStrLnOut "\nFound Globals:"
     mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
@@ -188,11 +226,17 @@ printOutput opts o trues = do
         then "### "
         else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
 
-printStats :: Statistics -> Statistics -> IO ()
-printStats s initialPassStats = do
+printStats :: Statistics -> Statistics -> Bool -> IO ()
+printStats s initialPassStats html = do
   let allStats = s Data.Monoid.<> initialPassStats
-  putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
-  putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
+  if html then do
+    putStrLnOut ("%%%mzn-html-start\n" ++
+     "NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls) ++
+     "<br>NUMEVALS: " ++ show (allStats ^. numberModelEvaluations) ++
+     "\n%%%mzn-html-end\n")
+  else do
+    putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
+    putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
 
 subgroupOf :: GroupName -> GroupName -> Bool
 subgroupOf (_,(loc1, mctxt1)) (_,(loc2, mctxt2)) =

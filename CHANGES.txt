@@ -3,6 +3,22 @@
 ======================
 
 
+Version 0.1.7.0
+=============
+
+Changes:
+ - Improved HTML output:
+   - Most (non logging) output is now wrapped in %%%mzn-html-{start|end}
+   - <ul> list output removed to improve interaction with IDE
+   - global constraints are no longer presented as links. Instead,
+     the links are listed after the global.
+   - Added link to search minizinc.org documentation
+   - Added link to Global Constraint Catalog
+ - Changed references to `alldifferent` to `all_different` for consistency
+
+Bug fixes:
+ - globalizer.msc: `--constraintFilterIn` argument was misspelled
+
 Version 0.1.6.0
 =============
 

@@ -7,6 +7,10 @@ Version 0.1.7.0
 =============
 
 Changes:
+ - Normalisation:
+   - Added code for normalising `forall...if` and `if...forall` loop
+     structures (this is experimental and so is not enabled or available
+     through cmdline arguments yet)
  - Improved HTML output:
    - Most (non logging) output is now wrapped in %%%mzn-html-{start|end}
    - <ul> list output removed to improve interaction with IDE

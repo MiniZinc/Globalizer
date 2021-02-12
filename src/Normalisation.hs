@@ -16,7 +16,11 @@ import Transform
 
 afterDataNormalisation ::[ Model -> Maybe (Model) ]
 afterDataNormalisation =
-             [ transformConstraintExpressions collectForalls
+             [
+             --   transformConstraintExpressions collectITEForalls
+             -- , transformConstraintExpressions collectForallITE
+             -- ,
+             transformConstraintExpressions collectForalls
              , monadToMaybe.transformMOnOf (template :: Traversal' (Model) [Generator]) template (monadify separateGenerators)
              , splitConjunctions2
              , removeTrivialConstraints
@@ -27,7 +31,11 @@ afterDataNormalisation =
 
 initialNormalisation ::[ Model -> Maybe (Model) ]
 initialNormalisation =
-    [ transformConstraintExpressions collectForalls
+    [
+    --  transformConstraintExpressions collectITEForalls
+    --, transformConstraintExpressions collectForallITE
+    --,
+      transformConstraintExpressions collectForalls
     , monadToMaybe.transformMOnOf (template :: Traversal' (Model) [Generator]) template (monadify separateGenerators)
     , splitConjunctions2
     , removeTrivialConstraints
@@ -166,6 +174,112 @@ collectForalls e = do
                    , _compType = ArrayComprehension
                    }
   return $ locExp $ GenCall "forall" newComp
+
+getCondDisjunction :: [(Expression, Expression)] -> Expression
+getCondDisjunction = foldr (\(c1,_) c -> locExp $ BinOp c1 BinOpOr c) (locExp $ BoolLit False)
+
+-- cond
+-- forall(i in A) (c)
+-- => forall(i in A where cond) (c)
+--
+-- cond
+-- (c)
+-- if cond then c else true endif
+pushCondIntoExpression :: Expression -> Expression -> Expression
+pushCondIntoExpression cond e =
+  fromMaybe (locExp $ BoolLit True) $ case e ^. expRawExpression of
+      GenCall "forall" c -> do
+        guard (c ^. compType == ArrayComprehension)
+        let w = fromMaybe (locExp $ BoolLit True) $ c ^. compWhere
+        let newComp = Comprehension {
+                          _compBody = c ^. compBody
+                        , _compGens = c ^. compGens
+                        , _compWhere = Just (locExp $ BinOp cond BinOpAnd w)
+                        , _compType = ArrayComprehension
+                        }
+        return $ locExp $ GenCall "forall" newComp
+      _ -> do
+        return $ locExp $ ITE [(cond, e)] (locExp $ BoolLit True)
+
+pushCondsIntoPairs' :: [(Expression, Expression)] -> [(Expression, Expression)] -> Int -> Expression
+pushCondsIntoPairs' ((c, e) : []) pairs n =
+  pushCondIntoExpression
+    (if n > 0 then locExp $ BinOp (locExp $ UnOp UnOpNot $ getCondDisjunction (take n pairs)) BinOpAnd c
+     else          c)
+    e
+
+pushCondsIntoPairs' ((c, e) : rest) pairs n =
+  let left = pushCondIntoExpression ( locExp $ BinOp (locExp $ UnOp UnOpNot $ getCondDisjunction (take n pairs)) BinOpAnd c ) e in
+  let right = pushCondsIntoPairs' rest pairs (n+1) in
+  locExp $ BinOp left BinOpAnd right
+pushCondsIntoPairs' [] _ _ = locExp $ BoolLit True
+
+pushCondsIntoPairs :: [(Expression, Expression)] -> Expression
+pushCondsIntoPairs pairs = pushCondsIntoPairs' pairs pairs 0
+
+-- Rewrite
+--
+-- if A then
+--   forall (i in S1 where X) (C1)
+-- elseif B then
+--   C2
+-- else
+--   forall (k in S3) (C3)
+-- endif
+--
+-- =>
+--    forall (i in S1 where X /\ A) (C1)
+-- /\ if B /\ not A then C2 else true endif
+-- /\ forall (k in S3 where not (A \/ B)) (C3)
+--
+collectITEForalls :: Expression -> Maybe (Expression)
+collectITEForalls e = do
+  ITE pairs c <- return $ e ^. expRawExpression
+  return $ locExp $ BinOp (pushCondsIntoPairs pairs)
+    BinOpAnd $ pushCondIntoExpression (locExp $ UnOp UnOpNot $ getCondDisjunction pairs) c
+
+
+reconstructCondForalls' :: Comprehension -> [(Expression, Expression)] -> [(Expression, Expression)] -> Int -> Expression
+reconstructCondForalls' f_c ((cond, th_c): rest) pairs n =
+  let left = reconstructCondForall ( locExp $ BinOp (locExp $ UnOp UnOpNot $ getCondDisjunction (take n pairs)) BinOpAnd cond ) f_c th_c in
+  let right = reconstructCondForalls' f_c rest pairs (n+1) in
+  locExp $ BinOp left BinOpAnd right
+reconstructCondForalls' _ [] _ _ = locExp $ BoolLit True
+
+reconstructCondForalls :: Comprehension -> [(Expression, Expression)] -> Expression
+reconstructCondForalls f_c pairs = reconstructCondForalls' f_c pairs pairs 0
+
+reconstructCondForall :: Expression -> Comprehension -> Expression -> Expression
+reconstructCondForall cond f_c c =
+  let w1 = fromMaybe (locExp $ BoolLit True) $ f_c ^. compWhere in
+  let newComp = Comprehension {
+                     _compBody = c
+                   , _compGens = f_c ^. compGens
+                   , _compWhere = Just (locExp $ BinOp w1 BinOpAnd cond)
+                   , _compType = ArrayComprehension
+                   } in
+  locExp $ GenCall "forall" newComp
+
+-- Rewrite
+--
+-- forall(i in S1 where X)
+-- ( if A then C1
+--   else      C2 endif )
+--
+-- =>
+--
+--    forall(i in S1 where A /\ X) (C1)
+-- /\ forall(i in S1 where not A /\ X) (C2)
+--
+collectForallITE :: Expression -> Maybe (Expression)
+collectForallITE e = do
+  GenCall "forall" c1 <- return $ e ^. expRawExpression
+  guard (c1 ^. compType == ArrayComprehension)
+  ITE pairs el <- return $ c1 ^. compBody ^. expRawExpression
+  return $ locExp $
+         BinOp ( reconstructCondForalls c1 pairs )
+               BinOpAnd $
+               reconstructCondForall (locExp $ UnOp UnOpNot $ getCondDisjunction pairs) c1 el
 
 transformConstraintExpressions :: (Expression -> Maybe (Expression))
                                -> (Model -> Maybe (Model))

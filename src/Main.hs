@@ -1,15 +1,11 @@
 {-# LANGUAGE GADTs #-}
 
-import Control.Applicative
 import Control.Concurrent (setNumCapabilities)
 import Control.Lens
 import Control.Monad
 import Data.List
-import Data.Maybe
 import qualified Data.Set as S
-import qualified Data.Text as T
 import System.IO
-import Data.Semigroup ((<>))
 import qualified Data.Monoid
 
 import Options.Applicative as O
@@ -29,6 +25,7 @@ main :: IO ()
 main = do
   main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.7.0")
 
+makeTI :: Inst -> Ranges -> Maybe Expression -> TypeInst
 makeTI inst ranges dom = 
   TypeInst { tiInst = inst
            , tiBase = BTInt
@@ -38,8 +35,11 @@ makeTI inst ranges dom =
            , tiDomain = dom
            }
 
+makeIndexSetOf3Call :: Show a => a -> String -> Maybe Expression
 makeIndexSetOf3Call dim var = Just . mkExp $ Call("index_set_" ++ show dim ++ "of3") [ mkExp (Ident var) ]
 
+construct3DChannelItem :: (Show a2, Show a1, Monad m) => [(a3, [((Constraint, [Argument]), b)])]
+                                 -> Maybe Location -> (a2, [Char], [Char], String, (a1, a1)) -> m [([Item], (VarId, [Char], [a1]))]
 construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter,  channelName, (other1, other2)) = do
   let bri3xs = nub [ x | (_,rs) <- o, ((c,args),_) <- rs
                    , name c == "binaries_represent_int" ++ dimUpperLetter
@@ -69,24 +69,24 @@ initialPass opts logHandle = do
     putStrLnOut("% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.")
 
   let includeCons = Just "binaries_represent_int,true"
-  let includePaths = case GOpts.includePaths opts of
-                       Just paths -> [pathsToDisjointLocation paths]
-                       Nothing -> []
-  let excludePaths = case GOpts.excludePaths opts of
-                       Just paths -> [pathsToDisjointLocation paths]
-                       Nothing -> []
+  let inPaths = case GOpts.includePaths opts of
+                  Just paths -> [pathsToDisjointLocation paths]
+                  Nothing -> []
+  let exPaths = case GOpts.excludePaths opts of
+                  Just paths -> [pathsToDisjointLocation paths]
+                  Nothing -> []
 
   (o,s) <- processModelAndData opts 
                                (acceptableConstraint includeCons Nothing)
-                               (acceptableGroup includePaths excludePaths)
+                               (acceptableGroup inPaths exPaths)
                                []
                                []
                                logHandle
 
   let introducedLocation = Just (Location (Position "introduced" (-99) (-99)) (Position "introduced" (-99) (-99)))
-  extraItems3X <- mapM (construct3DChannelItem o introducedLocation) [ (1, "_3a", "_3A", "channelCAB", (2,3))
-                                                                     , (2, "_3b", "_3B", "channelACB", (1,3))
-                                                                     , (3, "_3c", "_3C", "channelABC", (1,2)) ]
+  extraItems3X <- mapM (construct3DChannelItem o introducedLocation) [ (1 :: Integer, "_3a", "_3A", "channelCAB", (2,3))
+                                                                     , (2 :: Integer, "_3b", "_3B", "channelACB", (1,3))
+                                                                     , (3 :: Integer, "_3c", "_3C", "channelABC", (1,2)) ]
   let extraItems = foldl (++) [] (map (concat . map fst) extraItems3X)
   let channelMap = foldl (++) [] (map (map snd) extraItems3X)
 
@@ -135,16 +135,16 @@ main2 opts = do
   let excludeCons = case (constraintFilterEx opts) of
                       Nothing -> Just "true"
                       Just s -> Just $ s ++ ",true"
-  let includePaths = case GOpts.includePaths opts of
-                       Just paths -> [pathsToDisjointLocation paths]
-                       Nothing -> []
-  let excludePaths = case GOpts.excludePaths opts of
-                       Just paths -> [pathsToDisjointLocation paths]
-                       Nothing -> []
+  let inPaths = case GOpts.includePaths opts of
+                  Just paths -> [pathsToDisjointLocation paths]
+                  Nothing -> []
+  let exPaths = case GOpts.excludePaths opts of
+                  Just paths -> [pathsToDisjointLocation paths]
+                  Nothing -> []
 
   (o,s) <- processModelAndData opts
                                (acceptableConstraint includeCons excludeCons)
-                               (acceptableGroup includePaths (excludePaths ++ getDisjointLocations trues))
+                               (acceptableGroup inPaths (exPaths ++ getDisjointLocations trues))
                                extraItems
                                channelMap
                                logHandle
@@ -166,9 +166,9 @@ printOutput :: GOpts.GlobalizerOptions
 printOutput opts o trues = do
   -- (t ^. _1 ^. _2) accesses the second element of the first element of Tuple t
   let nameReps :: [ (GroupName, Replacement, Expression) ] 
-      nameReps =  [ (name, replacement, constraint)
+      nameReps =  [ (ident, replacement, constraint)
                        | x <- o, -- (GroupName, (S.Set (Model), Maybe (Expression)))
-                         let name = x ^. _1 ^. _1,  -- Groupname
+                         let ident = x ^. _1 ^. _1,  -- Groupname
                          (replacement,_) <- x ^. _2, -- (S.Set (model), _)
                          let constraints = [ c | ConstraintI c <- (S.findMin (x ^. _1 ^. _2 ^. _1)) ^. modelItems ],
                          let constraint = head constraints ]
@@ -200,7 +200,7 @@ printOutput opts o trues = do
         then "### "
         else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
           " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">highlight</a>," ++
-          "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>)" ++
+          "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>," ++
           -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Documentation</a>," ++
           "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ constraintName (name (fst r)) ++ ".html\">GCCatalog</a>]" ++
           "</li>")) realReplacements

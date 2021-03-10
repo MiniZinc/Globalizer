@@ -27,6 +27,8 @@ data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
                        , numJobs :: Int
                        , filterArguments :: Bool
                        , maxArguments :: Int
+                       , doHandleITEForalls :: Bool
+                       , doHandleForallITEs :: Bool
                        , doInitialPass :: Bool
                        , doImpliesCheck :: Bool
                        , doOutputHTML :: Bool
@@ -55,6 +57,8 @@ parseOptions = GlobalizerOptions
                  <*> parseNumJobs
                  <*> parseFilterArguments
                  <*> parseMaxArguments
+                 <*> parseDoHandleITEForalls
+                 <*> parseDoHandleForallITEs
                  <*> parseDoInitialPass
                  <*> parseDoImpliesCheck
                  <*> parseDoOutputHTML
@@ -194,6 +198,18 @@ parseDoImpliesCheck :: O.Parser Bool
 parseDoImpliesCheck = flag True False $
   long "no-implies-check"
   <> help "Don't run the implies check"
+  <> showDefault
+
+parseDoHandleITEForalls :: O.Parser Bool
+parseDoHandleITEForalls = flag False True $
+  long "norm-if"
+  <> help "Replace if statements containing foralls with foralls with where clauses"
+  <> showDefault
+
+parseDoHandleForallITEs :: O.Parser Bool
+parseDoHandleForallITEs = flag False True $
+  long "norm-fi"
+  <> help "Replace foralls containing if statements with foralls with where clauses"
   <> showDefault
 
 parseDoOutputHTML :: O.Parser Bool

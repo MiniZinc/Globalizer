@@ -151,7 +151,16 @@ processModelAndData opts consFilter groupFilter extraItems channelMap logHandle 
   ((o,modelMap),stats) <- runStatistics $ do
     originalModel0 <- liftIO (readModel modelFile)
     let originalModel = originalModel0 & modelItems %~ (++extraItems)
-    let normalisedModel = rewriteModel initialNormalisation originalModel
+
+    let normalisationSteps = (if doHandleITEForalls opts
+                              then [ transformConstraintExpressions collectITEForalls ]
+                              else []) ++
+                             (if doHandleForallITEs opts
+                              then [ transformConstraintExpressions collectForallITE ]
+                              else []) ++
+                              initialNormalisation
+
+    let normalisedModel = rewriteModel normalisationSteps originalModel
     log logHandle LogNormalisation $ unlines
       [ "", "NORMALISATION", "", "before:", plainShow originalModel, ""
       , "after:", plainShow normalisedModel, "" ]
@@ -166,10 +175,17 @@ processModelAndData opts consFilter groupFilter extraItems channelMap logHandle 
 
     globalsModel <- liftIO (stripMetadataModel . (either (const (error "no both-glob.mzn?")) id) <$> parseModelFile bothglobMznPath)
     let env = topLevelBindings (stripMetadataModel globalsModel)
+    let afterDataNormalisationSteps = (if doHandleITEForalls opts
+                              then [ transformConstraintExpressions collectITEForalls ]
+                              else []) ++
+                             (if doHandleForallITEs opts
+                              then [ transformConstraintExpressions collectForallITE ]
+                              else []) ++
+                              afterDataNormalisation
 
     modelSets <- forM (zip [0..] gs) $ \(n,(g,context)) -> statisticsTime (T.pack ("model set " ++ show n)) $ do
       let conname = (n,(modelConstraintLocations (head g), context))
-          ms = [ rewriteModel afterDataNormalisation (m & modelItems <>~ d ^. modelItems) | m <- map stripMetadataModel g, d <- map stripMetadataModel ds ]
+          ms = [ rewriteModel afterDataNormalisationSteps (m & modelItems <>~ d ^. modelItems) | m <- map stripMetadataModel g, d <- map stripMetadataModel ds ]
       recordLogKey "conname" (show conname)
       recordLogKey "after data norm" (plainShow (head ms))
       let ms' = filter (connected . rewriteOf ignored removeTrivialConstraints) ms

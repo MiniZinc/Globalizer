@@ -86,7 +86,7 @@ splitPath path = split "|" path
 
 v4tot4 :: [a] -> (a,a,a,a)
 v4tot4 [sl,sc,el,ec] = (sl,sc,el,ec)
-v4tot4 xs = error "Not enough elements in list"
+v4tot4 _ = error "Not enough elements in list"
 
 pathToTuples :: String -> [(Int, Int, Int, Int)]
 pathToTuples paths = [ v4tot4 [ read i :: Int | i <- splitPath path ] | path <- splitPaths paths ]

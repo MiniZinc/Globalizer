@@ -168,14 +168,14 @@ processModelAndData opts consFilter groupFilter extraItems channelMap logHandle 
     let env = topLevelBindings (stripMetadataModel globalsModel)
 
     modelSets <- forM (zip [0..] gs) $ \(n,(g,context)) -> statisticsTime (T.pack ("model set " ++ show n)) $ do
-      let name = (n,(modelConstraintLocations (head g), context))
+      let conname = (n,(modelConstraintLocations (head g), context))
           ms = [ rewriteModel afterDataNormalisation (m & modelItems <>~ d ^. modelItems) | m <- map stripMetadataModel g, d <- map stripMetadataModel ds ]
-      recordLogKey "name" (show name)
+      recordLogKey "conname" (show conname)
       recordLogKey "after data norm" (plainShow (head ms))
       let ms' = filter (connected . rewriteOf ignored removeTrivialConstraints) ms
       recordLogKey "num connected submodels" (show (length ms'))
       return $ id
-             $ (name, (S.fromList ms', (stripMetadataExp <$> context)))
+             $ (conname, (S.fromList ms', (stripMetadataExp <$> context)))
     let modelSets' = filter (not . S.null . fst . snd) (modelSets)
     let modelMap = M.fromList modelSets'
 
@@ -214,8 +214,8 @@ testMain' filename = do
   gs <- testGroups filename
   forM_ gs $ \ (ms, _) -> do
     putStrLn "\ngroup:\n"
-    let loc = modelConstraintLocations (head ms)
-    putStrLn $ "location: " ++ showDisjointLocation "unknown" loc
+    let loca = modelConstraintLocations (head ms)
+    putStrLn $ "location: " ++ showDisjointLocation "unknown" loca
     forM_ ms $ \m -> do
       putStrLn . plainShow $ m
 

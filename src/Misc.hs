@@ -42,6 +42,7 @@ pairUp compatible (a:as) bs = do
 --                  return $ (y,x:rest)
 
 -- This is the fast, memory-efficient version.
+select :: [a] -> [(a, [a])]
 select [] = []
 select (x:xs) = (x,xs) : do (y,rest) <- select xs
                             return (y, x:rest)

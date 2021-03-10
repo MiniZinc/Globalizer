@@ -17,10 +17,9 @@ import Transform
 afterDataNormalisation ::[ Model -> Maybe (Model) ]
 afterDataNormalisation =
              [
-             --   transformConstraintExpressions collectITEForalls
-             -- , transformConstraintExpressions collectForallITE
-             -- ,
-             transformConstraintExpressions collectForalls
+               -- transformConstraintExpressions collectITEForalls,
+               -- transformConstraintExpressions collectForallITE,
+               transformConstraintExpressions collectForalls
              , monadToMaybe.transformMOnOf (template :: Traversal' (Model) [Generator]) template (monadify separateGenerators)
              , splitConjunctions2
              , removeTrivialConstraints
@@ -32,9 +31,8 @@ afterDataNormalisation =
 initialNormalisation ::[ Model -> Maybe (Model) ]
 initialNormalisation =
     [
-    --  transformConstraintExpressions collectITEForalls
-    --, transformConstraintExpressions collectForallITE
-    --,
+      -- transformConstraintExpressions collectITEForalls,
+      -- transformConstraintExpressions collectForallITE,
       transformConstraintExpressions collectForalls
     , monadToMaybe.transformMOnOf (template :: Traversal' (Model) [Generator]) template (monadify separateGenerators)
     , splitConjunctions2
@@ -235,6 +233,12 @@ pushCondsIntoPairs pairs = pushCondsIntoPairs' pairs pairs 0
 collectITEForalls :: Expression -> Maybe (Expression)
 collectITEForalls e = do
   ITE pairs c <- return $ e ^. expRawExpression
+  _ <- if any (\t -> case t ^. expRawExpression of
+                        GenCall "forall" _ -> True
+                        _ -> False)
+              $ [ t | (_, t) <- pairs ] ++ [ c ]
+       then do Just True
+       else Nothing
   return $ locExp $ BinOp (pushCondsIntoPairs pairs)
     BinOpAnd $ pushCondIntoExpression (locExp $ UnOp UnOpNot $ getCondDisjunction pairs) c
 

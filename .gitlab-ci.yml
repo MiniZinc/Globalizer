@@ -22,7 +22,7 @@ build:linux:
   image: haskell:8.2
   variables:
     MZNARCH: "linux"
-  tags: [linux, docker]
+  tags: [linux, docker, high-mem]
 
 build:osx:
   <<: *build_definition

@@ -200,16 +200,13 @@ pushCondIntoExpression cond e =
         return $ locExp $ ITE [(cond, e)] (locExp $ BoolLit True)
 
 pushCondsIntoPairs' :: [(Expression, Expression)] -> [(Expression, Expression)] -> Int -> Expression
-pushCondsIntoPairs' ((c, e) : []) pairs n =
-  pushCondIntoExpression
-    (if n > 0 then locExp $ BinOp (locExp $ UnOp UnOpNot $ getCondDisjunction (take n pairs)) BinOpAnd c
-     else          c)
-    e
-
 pushCondsIntoPairs' ((c, e) : rest) pairs n =
   let left = pushCondIntoExpression ( locExp $ BinOp (locExp $ UnOp UnOpNot $ getCondDisjunction (take n pairs)) BinOpAnd c ) e in
-  let right = pushCondsIntoPairs' rest pairs (n+1) in
-  locExp $ BinOp left BinOpAnd right
+  if rest /= [] then
+    let right = pushCondsIntoPairs' rest pairs (n+1) in
+    locExp $ BinOp left BinOpAnd right
+  else
+    left
 pushCondsIntoPairs' [] _ _ = locExp $ BoolLit True
 
 pushCondsIntoPairs :: [(Expression, Expression)] -> Expression

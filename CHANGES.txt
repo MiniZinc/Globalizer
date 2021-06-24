@@ -2,6 +2,10 @@
 # Globalizer Changelog #
 ======================
 
+Version 0.1.7.1
+===============
+ - Added rough mapping from MiniZinc constraint names to Global Constraint Catalog names
+ - Added --norm-if and --norm-fi to globalizer.msc
 
 Version 0.1.7.0
 =============

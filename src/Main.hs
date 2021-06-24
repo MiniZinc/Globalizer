@@ -4,6 +4,7 @@ import Control.Concurrent (setNumCapabilities)
 import Control.Lens
 import Control.Monad
 import Data.List
+import Data.Text (replace, pack, unpack)
 import qualified Data.Set as S
 import System.IO
 import qualified Data.Monoid
@@ -159,6 +160,59 @@ main2 opts = do
   printOutput opts o trues
   printStats s initialPassStats (doOutputHTML opts)
 
+-- Remove checking or assert
+remove :: String -> String -> String
+remove w = unpack . replace (pack w) (pack "") . pack
+
+cleanName :: String -> String
+cleanName = remove "_checking" . remove "_assert"
+
+-- Map internal names to Global Constraint Catalog names
+gccatName :: String -> String
+gccatName = gccatName' . cleanName
+
+gccatName' :: String -> String
+gccatName' conname
+  | conname == "all_different"             = "alldifferent"
+  | conname == "alldifferent_except_0"     = "alldifferent_except_0"
+  | conname == "all_equal_int"             = "all_equal_int"
+  | conname == "atleast"                   = "atleast"
+  | conname == "atmost"                    = "atmost"
+  | conname == "bin_packing"               = "bin_packing"
+  | conname == "bin_packing_capa"          = "bin_packing_capa"
+  | conname == "bin_packing_load"          = "bin_packing"
+  | conname == "bin_packing_load_ub"       = "bin_packing"
+  | conname == "circuit"                   = "circuit"
+  | conname == "count"                     = "count"
+  | conname == "count_geq"                 = "count"
+  | conname == "cumulative"                = "cumulative"
+  | conname == "decreasing"                = "decreasing"
+  | conname == "diffn"                     = "diffn"
+  | conname == "distribute"                = "global_cardinality"
+  | conname == "element"                   = "element"
+  | conname == "exactly"                   = "exactly"
+  | conname == "gcc"                       = "global_cardinality"
+  | conname == "global_cardinality"        = "global_cardinality"
+  | conname == "inverse"                   = "inverse"
+  | conname == "increasing"                = "increasing"
+  | conname == "lex_greater"               = "lex_greater"
+  | conname == "lex_greatereq"             = "lex_greatereq"
+  | conname == "lex_less"                  = "lex_less"
+  | conname == "lex_lesseq"                = "lex_lesseq"
+  | conname == "lex2"                      = "lex2"
+  | conname == "maximum"                   = "maximum"
+  | conname == "minimum"                   = "minimum"
+  | conname == "member"                    = "in"
+  | conname == "nvalue"                    = "nvalue"
+  | conname == "sliding_sum"               = "sliding_sum"
+  | conname == "sort"                      = "sort"
+  | conname == "strict_lex2"               = "strict_lex2"
+  | conname == "sum_constraint"            = "sum_constraint"
+  | conname == "value_precede"             = "value_precede"
+  | conname == "true"                      = "true"
+  | conname == "subcircuit"                = "unknown"
+  | otherwise                              = "unknown"
+
 printOutput :: GOpts.GlobalizerOptions
                -> [ (( GroupName, (S.Set (Model), Maybe (Expression)) ), [(Replacement, Double)]) ]
                -> [ GroupName ]
@@ -199,10 +253,10 @@ printOutput opts o trues = do
         if vacuous ((l,ml),r,c)
         then "### "
         else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
-          " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">highlight</a>," ++
-          "<a href=\"https://www.minizinc.org/doc-2.5.3/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">docs</a>," ++
-          -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Documentation</a>," ++
-          "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ constraintName (name (fst r)) ++ ".html\">GCCatalog</a>]" ++
+          " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">Highlight</a>," ++
+          "<a href=\"https://www.minizinc.org/doc-2.5.5/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Docs</a>," ++
+          -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ cleanName (constraintName (name (fst r))) ++ "\">Docs</a>," ++
+          "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ gccatName (constraintName (name (fst r))) ++ ".html\">GCCatalog</a>]" ++
           "</li>")) realReplacements
     putStrLnOut("<br>")
     putStrLnOut("%%%mzn-html-end")

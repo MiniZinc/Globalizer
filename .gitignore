@@ -22,3 +22,4 @@ output
 error*
 .stack-work
 bundles/
+stack.yaml.lock

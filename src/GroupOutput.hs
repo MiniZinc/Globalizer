@@ -1413,10 +1413,13 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
 
   -- The actions that will run all the groups.
   let groupList = filter (\(gn,_) -> filterGroups gn) (M.toList groupMap)
-  if GOpts.doOutputHTML opts then do
-    liftIO $ putStrLn $ "%%%mzn-html-start\n" ++ "NUMGROUPS: " ++ show (length groupList) ++ "\n%%%mzn-html-end"
-  else do
-    liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length groupList)
+  if GOpts.useSections opts then do
+      liftIO $ putStrLn $ "{\"type\", \"statistics\", " ++ "\"NUMGROUPS\": " ++ show (length groupList) ++ "}"
+  else
+    if GOpts.doOutputHTML opts then do
+      liftIO $ putStrLn $ "%%%mzn-html-start\n" ++ "NUMGROUPS: " ++ show (length groupList) ++ "\n%%%mzn-html-end"
+    else do
+      liftIO $ putStrLn $ "% NUMGROUPS: " ++ show (length groupList)
 
   let actions0 = map (uncurry runGroup) (zip [0..] groupList)
   -- If the user selected a specific group, only run that one.
@@ -1427,7 +1430,7 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
 
   -- Run all the actions in parallel, gathering the outputs and
   -- statistics.
-  (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited numCapabilities actions)
+  (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited (progressOut $ GOpts.useSections opts) numCapabilities actions)
 
   -- Glue the statistics from all the runs together.
   let combinedStats = mconcat stats
@@ -1442,26 +1445,33 @@ stripped :: String -> String
 stripped = fst . span (/='/') . tail . snd . break (=='/')
 
 
+progressOut :: Bool -> Double -> IO ()
+progressOut true i = do
+    hPrintf stdout "{\"type\": \"progress\", \"value\": %.2f}\n" i
+    hFlush stdout
+
+progressOut false i = do
+    hPrintf stdout "%%%%%%mzn-progress %.2f\n" i
+    hFlush stdout
 
 {- From: http://stackoverflow.com/a/22674732 -}
-concurrentlyLimited :: Int -> [IO a] -> IO [a]
-concurrentlyLimited n tasks = concurrentlyLimited' n (zip [0..] tasks) [] [] (length tasks)
+concurrentlyLimited :: (Double -> IO ()) -> Int -> [IO a] -> IO [a]
+concurrentlyLimited po n tasks = concurrentlyLimited' po n (zip [0..] tasks) [] [] (length tasks)
 
-concurrentlyLimited' _ [] [] results _ntasks = do
-    hPrintf stdout "%%%%%%mzn-progress 100.00\n"
-    hFlush stdout
+
+concurrentlyLimited' po _ [] [] results _ntasks = do
+    po 100
     return . map snd $ sortBy (comparing fst) results
-concurrentlyLimited' 0 todo ongoing results ntasks = do
+concurrentlyLimited' po 0 todo ongoing results ntasks = do
     (task, newResult) <- waitAny ongoing
-    concurrentlyLimited' 1 todo (delete task ongoing) (newResult:results) ntasks
-concurrentlyLimited' _ [] ongoing results ntasks = concurrentlyLimited' 0 [] ongoing results ntasks
-concurrentlyLimited' n ((i::Int, task):otherTasks) ongoing results ntasks = do
+    concurrentlyLimited' po 1 todo (delete task ongoing) (newResult:results) ntasks
+concurrentlyLimited' po _ [] ongoing results ntasks = concurrentlyLimited' po 0 [] ongoing results ntasks
+concurrentlyLimited' po n ((i::Int, task):otherTasks) ongoing results ntasks = do
     let ntasks' :: Double = fromIntegral ntasks
     let i' :: Double = fromIntegral i
-    hPrintf stdout "%%%%%%mzn-progress %.2f\n" (100.0 * i' / ntasks')
-    hFlush stdout
+    po (100.0 * i' / ntasks')
     t <- async $ (i,) <$> task
-    concurrentlyLimited' (n-1) otherTasks (t:ongoing) results ntasks
+    concurrentlyLimited' po (n-1) otherTasks (t:ongoing) results ntasks
 
 
 argInt0 :: ArgType

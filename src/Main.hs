@@ -36,6 +36,16 @@ makeTI inst ranges dom =
            , tiDomain = dom
            }
 
+putStrLnOut :: String -> IO()
+putStrLnOut t = hPutStr stdout $ t ++ "\n"
+
+putStrLnEscOut :: String -> IO()
+putStrLnEscOut t = hPutStr stdout $ t ++ "\\n"
+
+putStrOut :: String -> IO()
+putStrOut t = hPutStr stdout $ t
+
+
 makeIndexSetOf3Call :: Show a => a -> String -> Maybe Expression
 makeIndexSetOf3Call dim var = Just . mkExp $ Call("index_set_" ++ show dim ++ "of3") [ mkExp (Ident var) ]
 
@@ -61,13 +71,21 @@ construct3DChannelItem o introducedLocation (dim, dimLowerLetter, dimUpperLetter
 
 initialPass :: GOpts.GlobalizerOptions -> SimpleLog.Handle -> IO ([Item], ChannelMap, Statistics, [GroupName])
 initialPass opts logHandle = do
-  if (doOutputHTML opts)
+  if (useSections opts)
   then do
-    putStrLnOut("%%%mzn-html-start")
-    putStrLnOut("Starting initial Globalizer pass; Skip this pass with --no-initial-pass.")
-    putStrLnOut("%%%mzn-html-end")
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("{\"type\": \"message\", \"message\": \"Starting initial Globalizer pass; Skip this pass with --no-initial-pass.\"}")
+    else
+      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.\"}")
   else
-    putStrLnOut("% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.")
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("%%%mzn-html-start")
+      putStrLnOut("Starting initial Globalizer pass; Skip this pass with --no-initial-pass.")
+      putStrLnOut("%%%mzn-html-end")
+    else
+      putStrLnOut("% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.")
 
   let includeCons = Just "binaries_represent_int,true"
   let inPaths = case GOpts.includePaths opts of
@@ -94,20 +112,25 @@ initialPass opts logHandle = do
   let trues = nub [ gn | ((gn,(_,_)),rs) <- o
                   , any (\((c,_),_) -> name c == "true") rs]
 
-  if (doOutputHTML opts)
+  if (useSections opts)
   then do
-    putStrLnOut("%%%mzn-html-start")
-    putStrLnOut("Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.")
-    putStrLnOut("%%%mzn-html-end")
-  else do
-    putStrLnOut("% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\n")
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("{\"type\": \"message\", \"message\": \"Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\"}")
+    else do
+      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\n\"}")
+  else
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("%%%mzn-html-start")
+      putStrLnOut("Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.")
+      putStrLnOut("%%%mzn-html-end")
+    else do
+      putStrLnOut("% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\n")
 
   if null extraItems
     then return ([], [], s, trues)
     else return (IncludeI "glob.mzn" Nothing : extraItems, channelMap, s, trues)
-
-putStrLnOut :: String -> IO()
-putStrLnOut t = hPutStr stdout $ t ++ "\n"
 
 main2 :: GOpts.GlobalizerOptions -> IO ()
 main2 opts = do
@@ -124,13 +147,21 @@ main2 opts = do
     else return ([], [], emptyStatistics, [])
 
   -- Run the full Globalizer
-  if (doOutputHTML opts)
+  if (useSections opts)
   then do
-    putStrLnOut("%%%mzn-html-start")
-    putStrLnOut("Starting full Globalizer pass")
-    putStrLnOut("%%%mzn-html-end")
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("{\"type\": \"message\", \"message\": \"Starting full Globalizer pass\"}")
+    else
+      putStrLnOut("{\"type\": \"message\", \"message\": \"Globalizer: Start full Globalizer pass\"}")
   else
-    putStrLnOut("% Globalizer: Start full Globalizer pass")
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("%%%mzn-html-start")
+      putStrLnOut("Starting full Globalizer pass")
+      putStrLnOut("%%%mzn-html-end")
+    else
+      putStrLnOut("% Globalizer: Start full Globalizer pass")
 
   let includeCons = constraintFilterIn opts
   let excludeCons = case (constraintFilterEx opts) of
@@ -149,16 +180,24 @@ main2 opts = do
                                extraItems
                                channelMap
                                logHandle
-  if (doOutputHTML opts)
-  then do 
-    putStrLnOut("%%%mzn-html-start")
-    putStrLnOut("Globalizer pass complete")
-    putStrLnOut("%%%mzn-html-end")
+  if (useSections opts)
+  then do
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("{\"type\": \"message\", \"message\": \"Globalizer pass complete\"}")
+    else
+      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Finished full Globalizer pass\"}")
   else
-    putStrLnOut("% Globalizer: Finished full Globalizer pass")
+    if (doOutputHTML opts)
+    then do 
+      putStrLnOut("%%%mzn-html-start")
+      putStrLnOut("Globalizer pass complete")
+      putStrLnOut("%%%mzn-html-end")
+    else
+      putStrLnOut("% Globalizer: Finished full Globalizer pass")
 
   printOutput opts o trues
-  printStats s initialPassStats (doOutputHTML opts)
+  printStats s initialPassStats (doOutputHTML opts) (useSections opts)
 
 -- Remove checking or assert
 remove :: String -> String -> String
@@ -232,65 +271,119 @@ printOutput opts o trues = do
   let realReplacements = filter (\x -> not (vacuous x) && not (shadowed x)) nameReps
   let modelFile = head $ (filter (isSuffixOf ".mzn") (GOpts.inputFiles opts))
 
-  if (doOutputHTML opts)
+  if (useSections opts)
   then do
-    putStrLnOut("%%%mzn-html-start")
+    if (doOutputHTML opts)
+    then do
+      putStrOut("{\"type\": \"solution\", \"output\": { \"html\": \"")
 
-    if length trues > 0 then do
-      putStrLnOut("<h2>Redundant submodels:</h2>")
-      mapM_ (\l -> putStrLnOut $ "<br>&nbsp;&#8226;&nbsp;<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "\">redundant/true</a>")
-            (getDisjointLocations trues)
-      putStrLnOut("<br>")
-    else
-      return ()
-
-
-    putStrLnOut("<h2>Found Globals:</h2>")
-    mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
-      if shadowed ((n,(l,ml)),r,c)
-      then "*** "
-      else "") ++ (
-        if vacuous ((l,ml),r,c)
-        then "### "
-        else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
-          " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">Highlight</a>," ++
-          "<a href=\"https://www.minizinc.org/doc-2.5.5/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Docs</a>," ++
-          -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ cleanName (constraintName (name (fst r))) ++ "\">Docs</a>," ++
-          "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ gccatName (constraintName (name (fst r))) ++ ".html\">GCCatalog</a>]" ++
-          "</li>")) realReplacements
-    putStrLnOut("<br>")
-    putStrLnOut("%%%mzn-html-end")
-  else do
-    if length trues > 0 then do
-      putStrLnOut "Redundant submodels:"
-      if length trues > 0 then
-        mapM_ (\l -> putStrLnOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
+      if length trues > 0 then do
+        putStrOut("<h2>Redundant submodels:</h2>")
+        mapM_ (\l -> putStrOut $ "<br>&nbsp;&#8226;&nbsp;<a href=\\\"highlight://?" ++ showDisjointLocation modelFile l ++ "\\\">redundant/true</a>")
               (getDisjointLocations trues)
+        putStrOut("<br>")
       else
-        putStrLnOut "None"
-    else
-      return ()
+        return ()
 
-    putStrLnOut "\nFound Globals:"
-    mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
-      if shadowed ((n,(l,ml)),r,c)
-      then "*** "
-      else "") ++ (
-        if vacuous ((l,ml),r,c)
-        then "### "
-        else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+      putStrOut("<h2>Found Globals:</h2>")
+      mapM_ (\(((n,(l,ml))),r,c) -> putStrOut ((
+        if shadowed ((n,(l,ml)),r,c)
+        then "*** "
+        else "") ++ (
+          if vacuous ((l,ml),r,c)
+          then "### "
+          else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
+            " [<a href=\\\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\\\">Highlight</a>," ++
+            "<a href=\\\"https://www.minizinc.org/doc-2.5.5/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\\\">Docs</a>," ++
+            -- "<a href=\\\"http://localhost:8000/lib-globals.html?highlight=" ++ cleanName (constraintName (name (fst r))) ++ "\\\">Docs</a>," ++
+            "<a href=\\\"https://sofdem.github.io/gccat/gccat/C" ++ gccatName (constraintName (name (fst r))) ++ ".html\\\">GCCatalog</a>]" ++
+            "</li>")) realReplacements
+      putStrOut("<br>")
+      putStrLnOut("\"}}")
+    else do
+      putStrOut "{\"type\": \"solution\", \"output\": { \"raw\": \""
+      if length trues > 0 then do
+        putStrLnEscOut "Redundant submodels:"
+        if length trues > 0 then
+          mapM_ (\l -> putStrLnEscOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
+                (getDisjointLocations trues)
+        else
+          putStrLnEscOut "None"
+      else
+        return ()
 
-printStats :: Statistics -> Statistics -> Bool -> IO ()
-printStats s initialPassStats html = do
-  let allStats = s Data.Monoid.<> initialPassStats
-  if html then do
-    putStrLnOut ("%%%mzn-html-start\n" ++
-     "NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls) ++
-     "<br>NUMEVALS: " ++ show (allStats ^. numberModelEvaluations) ++
-     "\n%%%mzn-html-end\n")
+      putStrLnEscOut "\\nFound Globals:"
+      mapM_ (\(((n,(l,ml))),r,c) -> putStrLnEscOut ((
+        if shadowed ((n,(l,ml)),r,c)
+        then "*** "
+        else "") ++ (
+          if vacuous ((l,ml),r,c)
+          then "### "
+          else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+      putStrLnOut "\"}}"
   else do
-    putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
-    putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
+    if (doOutputHTML opts)
+    then do
+      putStrLnOut("%%%mzn-html-start")
+
+      if length trues > 0 then do
+        putStrLnOut("<h2>Redundant submodels:</h2>")
+        mapM_ (\l -> putStrLnOut $ "<br>&nbsp;&#8226;&nbsp;<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "\">redundant/true</a>")
+              (getDisjointLocations trues)
+        putStrLnOut("<br>")
+      else
+        return ()
+
+
+      putStrLnOut("<h2>Found Globals:</h2>")
+      mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
+        if shadowed ((n,(l,ml)),r,c)
+        then "*** "
+        else "") ++ (
+          if vacuous ((l,ml),r,c)
+          then "### "
+          else "") ++ "<br>&nbsp;&#8226;&nbsp;" ++ prettyPrintify r ++
+            " [<a href=\"highlight://?" ++ showDisjointLocation modelFile l ++ "&" ++ maybe "" (showExpLocation modelFile) ml ++ "\">Highlight</a>," ++
+            "<a href=\"https://www.minizinc.org/doc-2.5.5/en/lib-globals.html?highlight=" ++ constraintName (name (fst r)) ++ "\">Docs</a>," ++
+            -- "<a href=\"http://localhost:8000/lib-globals.html?highlight=" ++ cleanName (constraintName (name (fst r))) ++ "\">Docs</a>," ++
+            "<a href=\"https://sofdem.github.io/gccat/gccat/C" ++ gccatName (constraintName (name (fst r))) ++ ".html\">GCCatalog</a>]" ++
+            "</li>")) realReplacements
+      putStrLnOut("<br>")
+      putStrLnOut("%%%mzn-html-end")
+    else do
+      if length trues > 0 then do
+        putStrLnOut "Redundant submodels:"
+        if length trues > 0 then
+          mapM_ (\l -> putStrLnOut $ showDisjointLocation modelFile l ++ " [ ] redundant/true" )
+                (getDisjointLocations trues)
+        else
+          putStrLnOut "None"
+      else
+        return ()
+
+      putStrLnOut "\nFound Globals:"
+      mapM_ (\(((n,(l,ml))),r,c) -> putStrLnOut ((
+        if shadowed ((n,(l,ml)),r,c)
+        then "*** "
+        else "") ++ (
+          if vacuous ((l,ml),r,c)
+          then "### "
+          else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
+
+printStats :: Statistics -> Statistics -> Bool -> Bool -> IO ()
+printStats s initialPassStats html useSections = do
+  let allStats = s Data.Monoid.<> initialPassStats
+  if useSections then do
+    putStrLnOut ("{\"type\": \"statistics\", \"NUMCALLS\": " ++ show (allStats ^. numberFlatZincCalls) ++ ", \"NUMEVALS\": " ++ show (allStats ^. numberModelEvaluations) ++ "}")
+  else
+    if html then do
+      putStrLnOut ("%%%mzn-html-start\n" ++
+       "NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls) ++
+       "<br>NUMEVALS: " ++ show (allStats ^. numberModelEvaluations) ++
+       "\n%%%mzn-html-end\n")
+    else do
+      putStrLnOut $ "% NUMCALLS: " ++ show (allStats ^. numberFlatZincCalls)
+      putStrLnOut $ "% NUMEVALS: " ++ show (allStats ^. numberModelEvaluations)
 
 subgroupOf :: GroupName -> GroupName -> Bool
 subgroupOf (_,(loc1, mctxt1)) (_,(loc2, mctxt2)) =

@@ -32,6 +32,7 @@ data GlobalizerOptions = GlobalizerOptions { inputFiles :: [String]
                        , doInitialPass :: Bool
                        , doImpliesCheck :: Bool
                        , doOutputHTML :: Bool
+                       , useSections :: Bool
                        , freeSearch :: Bool
                        }
   deriving (Show)
@@ -62,6 +63,7 @@ parseOptions = GlobalizerOptions
                  <*> parseDoInitialPass
                  <*> parseDoImpliesCheck
                  <*> parseDoOutputHTML
+                 <*> parseUseSections
                  <*> parseFreeSearch
 
 parseIncludePaths :: O.Parser (Maybe String)
@@ -216,6 +218,12 @@ parseDoOutputHTML :: O.Parser Bool
 parseDoOutputHTML = flag False True $
   long "output-html"
   <> help "Output HTML for MiniZincIDE"
+  <> showDefault
+
+parseUseSections :: O.Parser Bool
+parseUseSections = flag False True $
+  long "use-sections"
+  <> help "Output in sections for MiniZincIDE"
   <> showDefault
 
 parseFreeSearch :: O.Parser Bool

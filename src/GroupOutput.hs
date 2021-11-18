@@ -1360,6 +1360,14 @@ acceptableGroup includeDLocs excludeDLocs (_, (dl, _)) =
           _ -> not $ or [ disjointLocationContains edl dl | edl <- excludeDLocs ]
       ]
 
+progressOut :: Bool -> Double -> IO ()
+progressOut us i = do
+  if us then do
+    hPrintf stdout "{\"type\": \"progress\", \"value\": %.2f}\n" i
+  else
+    hPrintf stdout "%%%%%%mzn-progress %.2f\n" i
+  hFlush stdout
+
 runGroupsModels :: String
                 -> Bindings
                 -> M.Map GroupName (S.Set (Model), Maybe (Expression))
@@ -1428,9 +1436,11 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
                   Just idx -> [ actions0 !! idx ]
 
 
+  let po = progressOut $ GOpts.useSections opts
+
   -- Run all the actions in parallel, gathering the outputs and
   -- statistics.
-  (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited (progressOut $ GOpts.useSections opts) numCapabilities actions)
+  (guidoParts, stats) <- unzip <$> liftIO (concurrentlyLimited po numCapabilities actions)
 
   -- Glue the statistics from all the runs together.
   let combinedStats = mconcat stats
@@ -1444,15 +1454,6 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
 stripped :: String -> String
 stripped = fst . span (/='/') . tail . snd . break (=='/')
 
-
-progressOut :: Bool -> Double -> IO ()
-progressOut true i = do
-    hPrintf stdout "{\"type\": \"progress\", \"value\": %.2f}\n" i
-    hFlush stdout
-
-progressOut false i = do
-    hPrintf stdout "%%%%%%mzn-progress %.2f\n" i
-    hFlush stdout
 
 {- From: http://stackoverflow.com/a/22674732 -}
 concurrentlyLimited :: (Double -> IO ()) -> Int -> [IO a] -> IO [a]

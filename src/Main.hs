@@ -371,9 +371,9 @@ printOutput opts o trues = do
           else "") ++ showDisjointLocation modelFile l ++ " [ " ++ maybe "" (showExpLocation modelFile) ml ++ " ] " ++ prettyPrintify r)) realReplacements
 
 printStats :: Statistics -> Statistics -> Bool -> Bool -> IO ()
-printStats s initialPassStats html useSections = do
+printStats s initialPassStats html useSects = do
   let allStats = s Data.Monoid.<> initialPassStats
-  if useSections then do
+  if useSects then do
     putStrLnOut ("{\"type\": \"statistics\", \"NUMCALLS\": " ++ show (allStats ^. numberFlatZincCalls) ++ ", \"NUMEVALS\": " ++ show (allStats ^. numberModelEvaluations) ++ "}")
   else
     if html then do

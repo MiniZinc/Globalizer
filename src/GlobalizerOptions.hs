@@ -222,7 +222,7 @@ parseDoOutputHTML = flag False True $
 
 parseUseSections :: O.Parser Bool
 parseUseSections = flag False True $
-  long "use-sections"
+  long "json-stream"
   <> help "Output in sections for MiniZincIDE"
   <> showDefault
 

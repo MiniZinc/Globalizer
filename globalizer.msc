@@ -5,10 +5,10 @@
     "mznlib": "../globalizer",
     "name": "Globalizer",
     "supportsMzn": true,
-    "version": "0.1.7.0",
+    "version": "0.1.7.2",
     "needsStdlibDir": false,
     "needsMznExecutable": true,
-    "stdFlags": ["--output-html", "-v", "-p"],
+    "stdFlags": ["--output-html", "-v", "-p", "--json-stream"],
     "tags": ["experimental", "tool"],
     "extraFlags": [
       ["--no-initial-pass", "Don't check for channeling opportunities", "bool", "true"],

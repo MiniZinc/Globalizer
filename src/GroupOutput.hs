@@ -1363,7 +1363,7 @@ acceptableGroup includeDLocs excludeDLocs (_, (dl, _)) =
 progressOut :: Bool -> Double -> IO ()
 progressOut us i = do
   if us then do
-    hPrintf stdout "{\"type\": \"progress\", \"value\": %.2f}\n" i
+    hPrintf stdout "{\"type\": \"progress\", \"progress\": %.2f}\n" i
   else
     hPrintf stdout "%%%%%%mzn-progress %.2f\n" i
   hFlush stdout
@@ -1422,7 +1422,7 @@ runGroupsModels dataFilePath env groupMap opts filterCons filterGroups channelMa
   -- The actions that will run all the groups.
   let groupList = filter (\(gn,_) -> filterGroups gn) (M.toList groupMap)
   if GOpts.useSections opts then do
-      liftIO $ putStrLn $ "{\"type\", \"statistics\", " ++ "\"NUMGROUPS\": " ++ show (length groupList) ++ "}"
+      liftIO $ putStrLn $ "{\"type\": \"statistics\", \"statistics\": {" ++ "\"NUMGROUPS\": " ++ show (length groupList) ++ "}}"
   else
     if GOpts.doOutputHTML opts then do
       liftIO $ putStrLn $ "%%%mzn-html-start\n" ++ "NUMGROUPS: " ++ show (length groupList) ++ "\n%%%mzn-html-end"
@@ -1461,7 +1461,7 @@ concurrentlyLimited po n tasks = concurrentlyLimited' po n (zip [0..] tasks) [] 
 
 
 concurrentlyLimited' po _ [] [] results _ntasks = do
-    po 100
+    _ <- po 100
     return . map snd $ sortBy (comparing fst) results
 concurrentlyLimited' po 0 todo ongoing results ntasks = do
     (task, newResult) <- waitAny ongoing
@@ -1470,7 +1470,7 @@ concurrentlyLimited' po _ [] ongoing results ntasks = concurrentlyLimited' po 0 
 concurrentlyLimited' po n ((i::Int, task):otherTasks) ongoing results ntasks = do
     let ntasks' :: Double = fromIntegral ntasks
     let i' :: Double = fromIntegral i
-    po (100.0 * i' / ntasks')
+    _ <- po (100.0 * i' / ntasks')
     t <- async $ (i,) <$> task
     concurrentlyLimited' po (n-1) otherTasks (t:ongoing) results ntasks
 

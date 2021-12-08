@@ -24,7 +24,7 @@ import GlobalizerOptions as GOpts
 
 main :: IO ()
 main = do
-  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.7.0")
+  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.7.2")
 
 makeTI :: Inst -> Ranges -> Maybe Expression -> TypeInst
 makeTI inst ranges dom = 
@@ -75,9 +75,9 @@ initialPass opts logHandle = do
   then do
     if (doOutputHTML opts)
     then do
-      putStrLnOut("{\"type\": \"message\", \"message\": \"Starting initial Globalizer pass; Skip this pass with --no-initial-pass.\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"Starting initial Globalizer pass; Skip this pass with --no-initial-pass.\\n\"}")
     else
-      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"% Globalizer: Starting initial pass; Skip this pass with --no-initial-pass.\\n\"}")
   else
     if (doOutputHTML opts)
     then do
@@ -116,9 +116,9 @@ initialPass opts logHandle = do
   then do
     if (doOutputHTML opts)
     then do
-      putStrLnOut("{\"type\": \"message\", \"message\": \"Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\\n\"}")
     else do
-      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\n\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"% Globalizer: Initial pass complete: uncovered " ++ (show $ length extraItems) ++ " new viewpoints.\\n\"}")
   else
     if (doOutputHTML opts)
     then do
@@ -151,9 +151,9 @@ main2 opts = do
   then do
     if (doOutputHTML opts)
     then do
-      putStrLnOut("{\"type\": \"message\", \"message\": \"Starting full Globalizer pass\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"Starting full Globalizer pass\\n\"}")
     else
-      putStrLnOut("{\"type\": \"message\", \"message\": \"Globalizer: Start full Globalizer pass\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"Globalizer: Start full Globalizer pass\\n\"}")
   else
     if (doOutputHTML opts)
     then do
@@ -184,9 +184,9 @@ main2 opts = do
   then do
     if (doOutputHTML opts)
     then do
-      putStrLnOut("{\"type\": \"message\", \"message\": \"Globalizer pass complete\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"Globalizer pass complete\"}")
     else
-      putStrLnOut("{\"type\": \"message\", \"message\": \"% Globalizer: Finished full Globalizer pass\"}")
+      putStrLnOut("{\"type\": \"comment\", \"comment\": \"% Globalizer: Finished full Globalizer pass\"}")
   else
     if (doOutputHTML opts)
     then do 
@@ -374,7 +374,7 @@ printStats :: Statistics -> Statistics -> Bool -> Bool -> IO ()
 printStats s initialPassStats html useSects = do
   let allStats = s Data.Monoid.<> initialPassStats
   if useSects then do
-    putStrLnOut ("{\"type\": \"statistics\", \"NUMCALLS\": " ++ show (allStats ^. numberFlatZincCalls) ++ ", \"NUMEVALS\": " ++ show (allStats ^. numberModelEvaluations) ++ "}")
+    putStrLnOut ("{\"type\": \"statistics\", \"statistics\": { \"NUMCALLS\": " ++ show (allStats ^. numberFlatZincCalls) ++ ", \"NUMEVALS\": " ++ show (allStats ^. numberModelEvaluations) ++ "}}")
   else
     if html then do
       putStrLnOut ("%%%mzn-html-start\n" ++

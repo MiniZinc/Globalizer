@@ -28,6 +28,8 @@ build:osx:
   <<: *build_definition
   variables:
     MZNARCH: "osx"
+  before_script:
+    - 'echo arch: x86_64 >> stack.yaml'
   tags: [osx, haskell, stack]
 
 build:win64:

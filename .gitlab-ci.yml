@@ -39,6 +39,6 @@ build:win64:
   script:
     - mkdir globalizer\share\globalizer
     - stack --stack-root %CI_PROJECT_DIR%\stack --work-dir build --local-bin-path globalizer\bin build --copy-bins --verbose
-    - cp -r mznlib\globalizer globalizer\share\globalizer\mznlib
-    - cp globalizer.msc globalizer\share\globalizer\
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp -r mznlib\globalizer globalizer\share\globalizer\mznlib
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp globalizer.msc globalizer\share\globalizer\
   tags: [win64, haskell, stack]

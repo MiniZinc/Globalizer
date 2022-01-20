@@ -4,10 +4,10 @@ variables:
 .build_template: &build_definition
   stage: build
   script:
-    - mkdir -p globalizer/share/globalizer
+    - mkdir -p globalizer/share/minizinc/{globalizer,solvers}
     - stack --stack-root ${CI_PROJECT_DIR}/stack --work-dir build --local-bin-path globalizer/bin build --copy-bins --verbose
-    - cp -r mznlib/globalizer globalizer/share/globalizer/mznlib
-    - cp globalizer.msc globalizer/share/globalizer/
+    - cp -r mznlib/globalizer globalizer/share/minizinc
+    - cp globalizer.msc globalizer/share/minizinc/solvers/
   artifacts:
     paths:
       - globalizer
@@ -39,8 +39,9 @@ build:win64:
   before_script:
     - 'echo local-programs-path: %CI_PROJECT_DIR%\stack\programs >> stack.yaml'
   script:
-    - mkdir globalizer\share\globalizer
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- mkdir -p globalizer/share/minizinc/globalizer
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- mkdir -p globalizer/share/minizinc/solvers
     - stack --stack-root %CI_PROJECT_DIR%\stack --work-dir build --local-bin-path globalizer\bin build --copy-bins --verbose
-    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp -r mznlib\globalizer globalizer\share\globalizer\mznlib
-    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp globalizer.msc globalizer\share\globalizer\
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp -r mznlib/globalizer globalizer/share/minizinc
+    - stack --stack-root %CI_PROJECT_DIR%\stack exec -- cp globalizer.msc globalizer/share/minizinc/solvers/
   tags: [win64, haskell, stack]

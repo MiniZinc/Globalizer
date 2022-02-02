@@ -2,9 +2,11 @@
 # Globalizer Changelog #
 ======================
 
+
 Version 0.1.7.2
 ===============
  - Added support for --json-stream
+ - Solution parser can now parse array literals in solutions
 
 Version 0.1.7.1
 ===============

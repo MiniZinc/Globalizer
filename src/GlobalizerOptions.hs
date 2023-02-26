@@ -156,7 +156,7 @@ parseConstraintFilterEx = optional $ option str $
 
 parseStdlibDir :: O.Parser (Maybe String)
 parseStdlibDir = optional $ option str $
-  short 'I' <> long "stdlib-dir" <> long "mzn-stdlib-dir"
+  short 'I' <> short 'G' <> long "stdlib-dir" <> long "mzn-stdlib-dir"
   <> metavar "<dir>"
   <> help "Location of MiniZinc stdlib directory. (This should contain \"globalizer\" directory)"
 

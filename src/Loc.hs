@@ -48,7 +48,7 @@ locComb :: [DisjointLocation] -> DisjointLocation
 locComb = condenseDisjointLocation . DisjointLocation . concat . map unDisjointLocation
 
 newtype DisjointLocation = DisjointLocation { unDisjointLocation :: [Location] }
-  deriving (Monoid, Show, Typeable, Data, Eq, Ord)
+  deriving (Semigroup, Monoid, Show, Typeable, Data, Eq, Ord)
 
 locExp :: Expression' -> Expression
 locExp e' = mkExp e'

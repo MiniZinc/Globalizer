@@ -1,6 +1,22 @@
-flags: {}
+# GHC 9.6. Apple Silicon needs >= 9.2, and everything from there on brings
+# text 2, bytestring 0.11+, containers 0.6+ and random 1.2 together.
+resolver: lts-22.44
+
 packages:
 - '.'
 - 'submodules/minizinc-hs'
-extra-deps: [ global-lock-0.1 ]
-resolver: lts-10.0
+# Unmaintained upstream: needed one MonadFail fix to build with GHC 9. Vendored
+# rather than forked so the source of the build is visible in this repo.
+- 'vendor/wl-pprint-extras'
+
+# Not in Stackage. `global-lock` used to be listed here but nothing imports it.
+extra-deps:
+- monads-tf-0.3.0.1
+
+# wl-pprint-extras is unmaintained and its upper bounds predate this snapshot.
+# Try it against current containers/text/semigroupoids rather than pinning the
+# whole build to 2015 versions; if it genuinely fails, Print.hs moves to
+# `prettyprinter`.
+allow-newer: true
+allow-newer-deps:
+- wl-pprint-extras

@@ -6,7 +6,8 @@ module Statistics where
 
 import Control.Lens
 import Control.Monad.State.Strict
-import Data.Aeson as A
+-- aeson 2 introduced its own Key type; this module already has one.
+import Data.Aeson as A hiding (Key)
 import Data.Aeson.Encode.Pretty
 import qualified Data.ByteString.Lazy as B
 import Data.List
@@ -65,15 +66,19 @@ ins m ((k:ks),v) = let Subtree subm = M.findWithDefault (Subtree M.empty) k m
                        subm' = ins subm (ks,v)
                    in M.insert k (Subtree subm') m
 
-instance Monoid Statistics where
-    mempty = emptyStatistics
-    mappend s1 s2 = --emptyStatistics
+-- GHC 8.4 made Semigroup a superclass of Monoid, so the combining operation
+-- moves there; Monoid keeps only mempty.
+instance Semigroup Statistics where
+    s1 <> s2 = --emptyStatistics
         Statistics { _numberModelEvaluations = _numberModelEvaluations s1 + _numberModelEvaluations s2
                    , _numberFlatZincCalls = _numberFlatZincCalls s1 + _numberFlatZincCalls s2
                    , _numberSuccessfulImpliesChecks = _numberSuccessfulImpliesChecks s1 + _numberSuccessfulImpliesChecks s2
                    , _labelledTime = M.unionWith (+) (_labelledTime s1) (_labelledTime s2)
                    , _logTree = M.unionWith T.append (_logTree s1) (_logTree s2)
                    , _currentKey = _currentKey s1 }
+
+instance Monoid Statistics where
+    mempty = emptyStatistics
 
 emptyStatistics :: Statistics
 emptyStatistics = Statistics { _numberModelEvaluations = 0

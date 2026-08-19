@@ -42,7 +42,7 @@ integerVersion env e' = do
 dropIndex :: Integral i => i -> [a] -> [a]
 dropIndex i xs = genericTake i xs ++ genericDrop (i+1) xs
 
-getBooleanises :: Monad m => Expression -> m (String, Integer)
+getBooleanises :: MonadFail m => Expression -> m (String, Integer)
 getBooleanises e = do
   Call "booleanises" [x,idxe] <- return $ e ^. expRawExpression
   Ident i <- return $ x ^. expRawExpression

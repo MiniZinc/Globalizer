@@ -5,7 +5,7 @@
     "mznlib": "../globalizer",
     "name": "Globalizer",
     "supportsMzn": true,
-    "version": "0.1.7.2",
+    "version": "0.1.8",
     "needsStdlibDir": false,
     "needsMznExecutable": true,
     "stdFlags": ["--output-html", "-v", "-p", "--json-stream"],
@@ -18,7 +18,7 @@
       ["--sampleSolutions", "Number of solutions for scoring (30)", "int", "30"],
       ["--solvingTimeout", "Solver timeout 1000(ms)", "int", "1000"],
       ["--constraintFilterIn", "Consider only these comma separated substrings", "string", ""],
-      ["--free-search", "Don't use random heuristics", "bool", "true"]
+      ["--free-search", "Don't use random heuristics", "bool", "true"],
       ["--debug-args", "Debugging info for argument generation", "bool", "true"],
       ["--debug-constraints", "Debugging info for constraint checking", "bool", "true"],
       ["--debug-scoring", "Debugging info for constraint scoring", "bool", "true"],

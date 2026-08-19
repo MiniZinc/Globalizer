@@ -24,7 +24,7 @@ import GlobalizerOptions as GOpts
 
 main :: IO ()
 main = do
-  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.7.2")
+  main2 =<< execParser (parseOptions `withInfo` "MiniZinc Globalizer 0.1.8")
 
 makeTI :: Inst -> Ranges -> Maybe Expression -> TypeInst
 makeTI inst ranges dom = 
